@@ -1,0 +1,3 @@
+// hello i should be ignored by the lexer.
+// me too
+declare Int foo=10_0.00;
