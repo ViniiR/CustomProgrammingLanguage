@@ -37,10 +37,6 @@ impl<'a> Lexer<'a> {
     pub fn scan_source_code(&mut self) {
         // initializes the current_char to Ln 1 Col 1 char of the file
         self.move_to_next_char();
-        // if first character is a newline, move to the second line and don't consider it twice on the line count
-        // if self.is_new_line() {
-        //     self.move_to_next_line();
-        // }
         while !self.is_end_of_file {
             if self.is_whitespace() {
                 self.move_to_next_char();
@@ -53,11 +49,13 @@ impl<'a> Lexer<'a> {
                 } else if self.is_valid_number_literal_initializer() {
                     let token = self.determine_number_literal();
                     self.add_token_to_list(token);
+                } else if self.is_valid_string_literal() {
+                    let token = self.determine_string_literal();
+                    self.add_token_to_list(token);
                 } else {
-                    // this function moves to the operator next to the current one to check for
-                    // 2 chars long operators
+                    // this function moves to the char after the current one to check for
+                    // 2 char long operators
                     let token = self.determine_token();
-                    // dbg!(&token, &self.current_char);
                     match token.token_type {
                         TType::Comment => {
                             self.add_token_to_list(token);
@@ -79,46 +77,111 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn is_valid_string_literal(&self) -> bool {
+        self.current_char == '\'' || self.current_char == '\"'
+    }
+
     fn add_token_to_list(&mut self, token: Token) {
         self.token_list.push(token)
     }
 
-    fn is_valid_initial_identifier(&mut self) -> bool {
+    fn is_valid_initial_identifier(&self) -> bool {
         self.is_alphabetic() || self.current_char == '_'
     }
 
-    fn is_valid_following_identifier(&mut self) -> bool {
+    fn is_valid_following_identifier(&self) -> bool {
         self.is_alphabetic() || self.current_char == '_' || self.is_number_digit()
     }
 
-    fn is_whitespace(&mut self) -> bool {
+    fn is_whitespace(&self) -> bool {
         self.current_char.is_ascii_whitespace()
     }
 
-    fn is_new_line(&mut self) -> bool {
+    fn is_new_line(&self) -> bool {
         self.current_char == '\n' || self.current_char == '\r'
     }
 
-    fn is_number_digit(&mut self) -> bool {
+    fn is_number_digit(&self) -> bool {
         self.current_char.is_ascii_digit()
     }
 
-    fn is_alphabetic(&mut self) -> bool {
+    fn is_alphabetic(&self) -> bool {
         self.current_char.is_ascii_alphabetic()
     }
 
-    fn is_valid_number_literal_initializer(&mut self) -> bool {
+    fn is_valid_number_literal_initializer(&self) -> bool {
         self.is_number_digit() || self.current_char == '.'
     }
 
-    fn is_binary_operator(&self) -> bool {
-        self.current_char == '-'
-            || self.current_char == '+'
-            || self.current_char == '/'
-            || self.current_char == '*'
+    fn determine_string_literal(&mut self) -> Token {
+        let initial_column = self.current_column;
+        let initial_line = self.current_line;
+        let literal_initializer = self.current_char;
+        self.move_to_next_char();
+        let mut prev_char = self.current_char;
+        self.move_to_next_char();
+        let mut current_char = self.current_char;
+
+        let mut string_terminated = false;
+
+        let mut string_literal: Vec<char> = vec![literal_initializer];
+
+        loop {
+            if self.is_new_line() {
+                error(
+                    initial_line,
+                    initial_column,
+                    format!(
+                        "String literal '{}' must be terminated within the same line",
+                        literal_initializer
+                    ),
+                );
+                exit(1)
+            }
+            if self.is_end_of_file {
+                error(
+                    initial_line,
+                    initial_column,
+                    format!(
+                        "String literal '{}' not terminated before the end of file",
+                        literal_initializer
+                    ),
+                );
+                exit(1)
+            }
+
+            if prev_char == '\\' {
+                match get_escaped_char(current_char) {
+                    Ok(character) => {
+                        string_literal.push(character);
+                        self.move_to_next_char();
+                        prev_char = self.current_char;
+                        self.move_to_next_char();
+                        current_char = self.current_char;
+                        continue;
+                    }
+                    Err(_) => {
+                        break;
+                    }
+                }
+            } else if prev_char == literal_initializer {
+                string_literal.push(prev_char);
+                break;
+            }
+            string_literal.push(prev_char);
+            prev_char = current_char;
+            self.move_to_next_char();
+            current_char = self.current_char;
+        }
+
+        Token {
+            token_value: string_literal.into_iter().collect(),
+            token_type: TType::StringLiteral,
+            column_number: initial_column,
+            line_number: initial_line,
+        }
     }
 
-    // still broken with '+'
     fn determine_number_literal(&mut self) -> Token {
         let initial_column = self.current_column;
         let initial_line = self.current_line;
@@ -126,6 +189,9 @@ impl<'a> Lexer<'a> {
 
         let mut has_dot = false;
         let mut previous_char: Option<char> = None;
+
+        let mut previous_column = self.current_column;
+        let mut previous_line = self.current_line;
 
         loop {
             if has_dot && self.current_char == '.' {
@@ -148,16 +214,21 @@ impl<'a> Lexer<'a> {
                     );
                     exit(1)
                 } else if !c.is_ascii_digit() && !self.is_number_digit() {
+                    // if its a whitespace or linebreak, ignore it
+                    if self.is_whitespace() {
+                        self.move_to_next_char();
+                        continue;
+                    }
                     if c == '_' {
                         error(
-                            self.current_line,
-                            self.current_column,
+                            previous_line,
+                            previous_column,
                             String::from("'_' can only appear between digits"),
                         );
                     } else if c == '.' {
                         error(
-                            self.current_line,
-                            self.current_column,
+                            previous_line,
+                            previous_column,
                             String::from(
                                 "'.' can only appear between or on the start of numeric literals",
                             ),
@@ -169,6 +240,12 @@ impl<'a> Lexer<'a> {
             if is_valid_number_literal(&self.current_char) {
                 previous_char = Some(self.current_char);
                 number_literal.push(self.current_char);
+                previous_column = self.current_column;
+                previous_line = self.current_line;
+                self.move_to_next_char();
+            } else if self.is_whitespace() {
+                previous_column = self.current_column;
+                previous_line = self.current_line;
                 self.move_to_next_char();
             } else {
                 break;
@@ -225,7 +302,6 @@ impl<'a> Lexer<'a> {
             }
             _ => {
                 let token_value = format!("{}{}", first_char, self.current_char);
-                dbg!(&token_value);
                 if is_valid_multi_char(&token_value) {
                     let current_line = self.current_line;
                     self.move_to_next_char();
@@ -276,7 +352,7 @@ impl<'a> Lexer<'a> {
             },
             '+' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::AssignPlus,
-                _ => TType::Assign,
+                _ => TType::BinaryPlus,
             },
             '-' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::AssignMinus,
@@ -285,27 +361,27 @@ impl<'a> Lexer<'a> {
             '/' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::AssignDivision,
                 TType::BinaryDivision => TType::Comment,
-                _ => TType::Assign,
+                _ => TType::BinaryDivision,
             },
             '*' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::AssignMultiply,
-                _ => TType::Assign,
+                _ => TType::BinaryMultiply,
             },
             '%' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::AssignRest,
-                _ => TType::Assign,
+                _ => TType::BinaryRest,
             },
             '<' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::LogicalSmallerOrEqualsThan,
-                _ => TType::Assign,
+                _ => TType::LogicalSmallerThan,
             },
             '>' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::LogicalGreaterOrEqualsThan,
-                _ => TType::Assign,
+                _ => TType::LogicalGreaterThan,
             },
             '!' => match is_valid_long_operator(next_char) {
                 TType::Assign => TType::LogicalDifferent,
-                _ => TType::Assign,
+                _ => TType::LogicalNot,
             },
             '&' => TType::LogicalAnd,
             '|' => TType::LogicalOr,
@@ -324,6 +400,29 @@ impl<'a> Lexer<'a> {
             _ => TType::UNKNOWN,
         }
     }
+}
+
+fn get_escaped_char(character: char) -> Result<char, ()> {
+    match character {
+        'n' => Ok('\n'),
+        'r' => Ok('\r'),
+        't' => Ok('\t'),
+        '\\' => Ok('\\'),
+        '\'' => Ok('\''),
+        '\"' => Ok('\"'),
+        _ => Err(()),
+    }
+}
+
+fn is_valid_escape_char(character: char) -> bool {
+    character == 'n'
+        || character == 'r'
+        || character == 't'
+        || character == 'b'
+        || character == '\\'
+        || character == 'f'
+        || character == '\''
+        || character == '\"'
 }
 
 fn is_valid_number_literal(digit: &char) -> bool {
@@ -376,6 +475,7 @@ fn determine_alphabetic_token_type(token: &str) -> TType {
         "Flo" => TType::Flo,
         "Str" => TType::Str,
         "Nul" => TType::Nul,
+        "Arr" => TType::Arr,
         "declare" => TType::Variable,
         "define" => TType::Function,
         "while" => TType::While,
@@ -384,9 +484,8 @@ fn determine_alphabetic_token_type(token: &str) -> TType {
         "else" => TType::Else,
         "brk" => TType::Break,
         "ret" => TType::Return,
+        "for" => TType::For,
         _ => TType::Identifier,
-        // "for" => TType::For,
-        // "Arr" => TType::Array,
         // "Obj" => TType::Object,
         // "use" => TType::Use,
         // "from" => TType::From,

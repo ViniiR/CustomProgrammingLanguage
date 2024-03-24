@@ -1,3 +1,16 @@
-// hello i should be ignored by the lexer.
-// me too
-declare Int foo=10_0.00;
+declare Int foo = "Hello, world!\n";
+
+declare Boo bar = false;
+declare Boo baz = true;
+
+define Int foobarbaz() {
+    ret 10;
+}
+
+while !true {
+    foobarbaz();
+}
+
+declare Arr<Int>foobarz=[10,9,8];
+
+foobarbaz();

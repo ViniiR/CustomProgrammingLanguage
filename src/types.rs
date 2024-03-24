@@ -65,9 +65,9 @@ pub enum TokenTypes {
     ElseIf,   // Elseif
     Else,     // Else
     While,    // While
-    // For,      // For
-    Return, // Ret
-    Break,  // Brk
+    For,      // For
+    Return,   // Ret
+    Break,    // Brk
     // Use,      // Use Modname From 'mod/path'
     // From,     // From 'mod/path'
     // Switch,   // Switch
