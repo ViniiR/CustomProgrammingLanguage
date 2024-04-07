@@ -4,14 +4,6 @@ use crate::{
 };
 use std::process::exit;
 
-static IDENTIFIER_PATTERN: &str = "^[a-zA-Z_][a-zA-Z_0-9]*$";
-
-// fn matches_identifier(identifier: String) -> Bool {
-//     regex::Regex::new(IDENTIFIER_PATTERN)
-//         .unwrap()
-//         .is_match(identifier);
-// }
-
 #[derive(Debug)]
 pub struct Lexer<'a> {
     source_code_iter: std::str::Chars<'a>,
@@ -43,9 +35,7 @@ impl<'a> Lexer<'a> {
             } else {
                 if self.is_valid_initial_identifier() {
                     let token = self.determine_alphabetic_token();
-                    // already at the next char after the last char of the token
                     self.add_token_to_list(token);
-                    // so it wont move to the next char
                 } else if self.is_valid_number_literal_initializer() {
                     let token = self.determine_number_literal();
                     self.add_token_to_list(token);
@@ -68,7 +58,6 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
-        dbg!(&self.token_list);
     }
 
     fn ignore_current_line(&mut self) {
@@ -122,8 +111,6 @@ impl<'a> Lexer<'a> {
         self.move_to_next_char();
         let mut current_char = self.current_char;
 
-        let mut string_terminated = false;
-
         let mut string_literal: Vec<char> = vec![literal_initializer];
 
         loop {
@@ -173,6 +160,10 @@ impl<'a> Lexer<'a> {
             self.move_to_next_char();
             current_char = self.current_char;
         }
+
+        // removes the surrounding quotes from the string
+        string_literal.remove(0);
+        string_literal.pop();
 
         Token {
             token_value: string_literal.into_iter().collect(),
@@ -414,17 +405,6 @@ fn get_escaped_char(character: char) -> Result<char, ()> {
     }
 }
 
-fn is_valid_escape_char(character: char) -> bool {
-    character == 'n'
-        || character == 'r'
-        || character == 't'
-        || character == 'b'
-        || character == '\\'
-        || character == 'f'
-        || character == '\''
-        || character == '\"'
-}
-
 fn is_valid_number_literal(digit: &char) -> bool {
     digit.is_ascii_digit() || digit == &'_' || digit == &'.'
 }
@@ -470,14 +450,16 @@ fn determine_alphabetic_token_type(token: &str) -> TType {
     match token {
         "true" => TType::True,
         "false" => TType::False,
+        "null" => TType::Null,
         "Boo" => TType::Boo,
         "Int" => TType::Int,
         "Flo" => TType::Flo,
         "Str" => TType::Str,
         "Nul" => TType::Nul,
         "Arr" => TType::Arr,
-        "declare" => TType::Variable,
-        "define" => TType::Function,
+        "let" => TType::ConstantVariable,
+        "mut" => TType::MutableVariable,
+        "func" => TType::Function,
         "while" => TType::While,
         "if" => TType::If,
         "elseif" => TType::ElseIf,

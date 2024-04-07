@@ -1,4 +1,6 @@
-#[derive(Debug)]
+use core::fmt;
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenTypes {
     // Assignment Operators
     Assign,         // =
@@ -59,15 +61,16 @@ pub enum TokenTypes {
     Comment, // //
 
     // Keywords
-    Function, // Func
-    Variable, // Define Type
-    If,       // If
-    ElseIf,   // Elseif
-    Else,     // Else
-    While,    // While
-    For,      // For
-    Return,   // Ret
-    Break,    // Brk
+    Function,         // Func
+    ConstantVariable, // Define Type
+    MutableVariable,  // mut
+    If,               // If
+    ElseIf,           // Elseif
+    Else,             // Else
+    While,            // While
+    For,              // For
+    Return,           // Ret
+    Break,            // Brk
     // Use,      // Use Modname From 'mod/path'
     // From,     // From 'mod/path'
     // Switch,   // Switch
@@ -80,6 +83,7 @@ pub enum TokenTypes {
     StringLiteral,
     True,  // True
     False, // False
+    Null,  // Null
 
     // Unknown
     UNKNOWN, // any token that doesnt match anything
@@ -88,10 +92,234 @@ pub enum TokenTypes {
     EOF, // end of file
 }
 
-#[derive(Debug)]
+impl fmt::Display for TokenTypes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenTypes::Assign => {
+                write!(f, "=")
+            }
+            TokenTypes::AssignPlus => {
+                write!(f, "+=")
+            }
+            TokenTypes::AssignMinus => {
+                write!(f, "-+")
+            }
+            TokenTypes::AssignMultiply => {
+                write!(f, "*=")
+            }
+            TokenTypes::AssignDivision => {
+                write!(f, "/=")
+            }
+            TokenTypes::AssignRest => {
+                write!(f, "%=")
+            }
+            TokenTypes::BinaryPlus => {
+                write!(f, "+")
+            }
+            TokenTypes::BinaryMinus => {
+                write!(f, "-")
+            }
+            TokenTypes::BinaryDivision => {
+                write!(f, "/")
+            }
+            TokenTypes::BinaryMultiply => {
+                write!(f, "*")
+            }
+            TokenTypes::BinaryRest => {
+                write!(f, "%")
+            }
+            TokenTypes::LogicalNot => {
+                write!(f, "!")
+            }
+            TokenTypes::LogicalAnd => {
+                write!(f, "&")
+            }
+            TokenTypes::LogicalOr => {
+                write!(f, "|")
+            }
+            TokenTypes::LogicalEquals => {
+                write!(f, "==")
+            }
+            TokenTypes::LogicalDifferent => {
+                write!(f, "!=")
+            }
+            TokenTypes::LogicalSmallerThan => {
+                write!(f, "<")
+            }
+            TokenTypes::LogicalGreaterThan => {
+                write!(f, ">")
+            }
+            TokenTypes::LogicalSmallerOrEqualsThan => {
+                write!(f, "<=")
+            }
+            TokenTypes::LogicalGreaterOrEqualsThan => {
+                write!(f, ">=")
+            }
+            TokenTypes::Dot => {
+                write!(f, ".")
+            }
+            TokenTypes::LeftParenthesis => {
+                write!(f, "(")
+            }
+            TokenTypes::RightParenthesis => {
+                write!(f, ")")
+            }
+            TokenTypes::LeftSquareBracket => {
+                write!(f, "[")
+            }
+            TokenTypes::RightSquareBracket => {
+                write!(f, "]")
+            }
+            TokenTypes::LeftCurlyBrace => {
+                write!(f, "{{")
+            }
+            TokenTypes::RightCurlyBrace => {
+                write!(f, "}}")
+            }
+            TokenTypes::DoubleQuotes => {
+                write!(f, "\"")
+            }
+            TokenTypes::SingleQuotes => {
+                write!(f, "\'")
+            }
+            TokenTypes::Semicolon => {
+                write!(f, ";")
+            }
+            TokenTypes::Colon => {
+                write!(f, ":")
+            }
+            TokenTypes::Comma => {
+                write!(f, ",")
+            }
+            TokenTypes::Int => {
+                write!(f, "Keyword Int")
+            }
+            TokenTypes::Flo => {
+                write!(f, "Keyword Flo")
+            }
+            TokenTypes::Str => {
+                write!(f, "Keyword Str")
+            }
+            TokenTypes::Arr => {
+                write!(f, "Keyword Arr")
+            }
+            TokenTypes::Boo => {
+                write!(f, "Keyword Boo")
+            }
+            TokenTypes::Nul => {
+                write!(f, "Keyword Nul")
+            }
+            TokenTypes::Comment => {
+                write!(f, "Comment")
+            }
+            TokenTypes::Function => {
+                write!(f, "Keyword func")
+            }
+            TokenTypes::ConstantVariable => {
+                write!(f, "Keyword let")
+            }
+            TokenTypes::MutableVariable => {
+                write!(f, "Keyword mut")
+            }
+            TokenTypes::If => {
+                write!(f, "Keyword if")
+            }
+            TokenTypes::ElseIf => {
+                write!(f, "Keyword elseif")
+            }
+            TokenTypes::Else => {
+                write!(f, "Keyword else")
+            }
+            TokenTypes::While => {
+                write!(f, "Keyword while")
+            }
+            TokenTypes::For => {
+                write!(f, "Keyword for")
+            }
+            TokenTypes::Return => {
+                write!(f, "Keyword ret")
+            }
+            TokenTypes::Break => {
+                write!(f, "Keyword brk")
+            }
+            TokenTypes::Identifier => {
+                write!(f, "Identifier")
+            }
+            TokenTypes::NumberLiteral => {
+                write!(f, "NumericLiteral")
+            }
+            TokenTypes::StringLiteral => {
+                write!(f, "StringLiteral")
+            }
+            TokenTypes::True => {
+                write!(f, "Keyword true")
+            }
+            TokenTypes::False => {
+                write!(f, "Keyword false")
+            }
+            TokenTypes::Null => {
+                write!(f, "Keyword null")
+            }
+            TokenTypes::UNKNOWN => {
+                write!(f, "Unknown")
+            }
+            TokenTypes::EOF => {
+                write!(f, "EndOfFile")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Token {
     pub token_value: String,
     pub token_type: TokenTypes,
     pub column_number: u32,
     pub line_number: u32,
+}
+
+#[derive(Debug)]
+pub enum VarDeclarationKind {
+    Mutable,
+    Immutable,
+}
+
+#[derive(Debug)]
+pub struct Start {
+    pub line: u32,
+    pub column: u32,
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    Binary {
+        left: Box<Expression>,
+        operator: TokenTypes,
+        right: Box<Expression>,
+    },
+    Unary {
+        operator: TokenTypes,
+        operand: Box<Expression>,
+    },
+    Literal(String),
+    Call {
+        name: String,
+        arguments: Box<Vec<Expression>>,
+    },
+    Identifier(String),
+}
+
+#[derive(Debug)]
+pub enum Statement {
+    Program {
+        start: Start,
+        body: Box<Vec<Statement>>,
+    },
+    VariableDeclaration {
+        start: Start,
+        name: Option<String>,
+        kind: VarDeclarationKind,
+        r#type: Option<TokenTypes>,
+        value: Option<String>,
+    },
 }

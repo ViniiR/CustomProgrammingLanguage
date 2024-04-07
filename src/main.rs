@@ -1,4 +1,5 @@
 mod lexer;
+mod parser;
 mod types;
 
 use std::io::Write;
@@ -10,9 +11,10 @@ use std::{
 };
 
 use lexer::Lexer;
+use parser::Parser;
 
 fn repl() {
-    print!("Welcome to V++'s repl, type '\\leave' to exit\n");
+    print!("Welcome to bline's repl, type '\\leave' to exit\n");
     loop {
         print!("=> ");
         stdout().flush().expect("Failed to flush std output");
@@ -40,7 +42,9 @@ fn main() {
     }
 
     if args[1] == "--help" || args[1] == "-h" {
-        println!("This is the repl for the V++ (VPP) programming language, developed By: Vinícios");
+        println!(
+            "This is the interpreter for bline, a programming language developed By: Vinícios"
+        );
         stdout().flush().expect("Failed to flush");
         exit(0)
     }
@@ -50,7 +54,7 @@ fn main() {
     match Path::new(filename).extension() {
         Some(ext) => {
             let ext = ext.to_str().unwrap_or("").to_lowercase();
-            if ext != "vpp" {
+            if ext != "bline" {
                 eprintln!("Err: Wrong File type");
                 exit(1);
             }
@@ -65,7 +69,8 @@ fn main() {
         Ok(result) => {
             let mut lexer_instance = Lexer::new(&result);
             lexer_instance.scan_source_code();
-            // println!("{:?}", lexer_instance.token_list);
+            let mut parser_instance = Parser::new(lexer_instance.token_list);
+            parser_instance.parse();
         }
         Err(err) => {
             eprintln!("{err}");
