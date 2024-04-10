@@ -115,6 +115,14 @@ impl<'a> Lexer<'a> {
 
         loop {
             if self.is_new_line() {
+                if prev_char == literal_initializer {
+                    error(
+                        initial_line,
+                        initial_column,
+                        format!("Missing ';' at the end of String literal"),
+                    );
+                    exit(1)
+                }
                 error(
                     initial_line,
                     initial_column,
@@ -185,6 +193,9 @@ impl<'a> Lexer<'a> {
         let mut previous_line = self.current_line;
 
         loop {
+            if self.is_end_of_file {
+                break;
+            }
             if has_dot && self.current_char == '.' {
                 error(
                     self.current_line,
@@ -235,9 +246,8 @@ impl<'a> Lexer<'a> {
                 previous_line = self.current_line;
                 self.move_to_next_char();
             } else if self.is_whitespace() {
-                previous_column = self.current_column;
-                previous_line = self.current_line;
-                self.move_to_next_char();
+                //TODO: remove else if
+                break;
             } else {
                 break;
             }

@@ -290,7 +290,7 @@ pub struct Start {
     pub column: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Binary {
         left: Box<Expression>,
@@ -310,6 +310,16 @@ pub enum Expression {
 }
 
 #[derive(Debug)]
+pub enum VariableTypes {
+    Int,
+    Flo,
+    Str,
+    Nul,
+    Boo,
+    Arr(Box<VariableTypes>),
+}
+
+#[derive(Debug)]
 pub enum Statement {
     Program {
         start: Start,
@@ -319,7 +329,7 @@ pub enum Statement {
         start: Start,
         name: Option<String>,
         kind: VarDeclarationKind,
-        r#type: Option<TokenTypes>,
-        value: Option<String>,
+        r#type: Option<VariableTypes>,
+        value: Option<Expression>,
     },
 }

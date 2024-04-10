@@ -1,8 +1,8 @@
 use crate::{
     error,
-    types::{Expression, Start, Statement, Token, TokenTypes, VarDeclarationKind},
+    types::{Expression, Start, Statement, Token, TokenTypes, VarDeclarationKind, VariableTypes},
 };
-use std::{iter::Peekable, process::exit, str::EncodeUtf16};
+use std::{iter::Peekable, process::exit};
 
 #[derive(Debug)]
 pub struct Parser {
@@ -14,8 +14,48 @@ pub struct Parser {
 #[derive(Debug)]
 enum VarDecMutateOptions {
     Name,
-    Value,
+    Value(Expression),
 }
+
+// operator precedence
+// 12 ()
+//
+// 11 [] Arr[0]
+// 11 func()
+//
+// 10 !Boo
+//
+// 9 +
+// 9 -
+//
+// 8 Bin * Bin
+// 8 Bin / Bin
+// 8 Bin % Bin
+//
+// 7 Bin + Bin
+// 7 Bin - Bin
+// 7 Str + Str
+//
+// 6 Boo < Boo
+// 6 Boo <= Boo
+// 6 Boo > Boo
+// 6 Boo >= Boo
+//
+// 5 Boo == Boo
+// 5 Boo != Boo
+//
+// 4 Boo & Boo
+//
+// 3 Boo | Boo
+//
+// 2 = assignment
+// 2 += assignment
+// 2 -= assignment
+// 2 *= assignment
+// 2 /= assignment
+// 2 %= assignment
+//
+// 1 , separator (10,10+10)
 
 impl Parser {
     pub fn new(token_vector: Vec<Token>) -> Self {
@@ -32,16 +72,48 @@ impl Parser {
 
     fn mutate_var_declaration(&mut self, var_dec: &mut Statement, option: VarDecMutateOptions) {
         match var_dec {
-            Statement::VariableDeclaration {
-                name,
-                // r#type,
-                // value,
-                ..
-            } => match option {
+            Statement::VariableDeclaration { name, value, .. } => match option {
                 VarDecMutateOptions::Name => *name = Some(self.current().token_value.to_owned()),
-                VarDecMutateOptions::Value => {}
+                VarDecMutateOptions::Value(val) => *value = Some(val),
             },
             _ => exit(1),
+        }
+    }
+
+    // error fixme
+    fn expect_expr_or_error(&mut self) {
+        match self.peek_type() {
+            TokenTypes::Identifier
+            | TokenTypes::NumberLiteral
+            | TokenTypes::StringLiteral
+            | TokenTypes::BinaryPlus
+            | TokenTypes::BinaryMinus
+            | TokenTypes::LogicalNot
+            | TokenTypes::True
+            | TokenTypes::False
+            | TokenTypes::LeftParenthesis => {}
+            TokenTypes::EOF => {
+                let current = self.current().to_owned();
+                if self.is_binary_operator(&current.token_type) {
+                    let peek = self.peek().unwrap().to_owned();
+                    self.expected_error("Expression", &peek);
+                }
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error(";", &peek);
+            }
+            _ => {
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error("Expression", &peek);
+            }
+        }
+    }
+
+    fn expected_or_error(&mut self, expected: &TokenTypes, expected_name: &str) {
+        if !self.peek_expect(expected) {
+            let def = self.current().to_owned();
+            let peek = self.peek().unwrap_or_else(|| &def).to_owned();
+            self.expected_error(expected_name, &peek);
+            exit(1)
         }
     }
 
@@ -94,7 +166,6 @@ impl Parser {
             Statement::VariableDeclaration { kind, .. } => match kind {
                 VarDeclarationKind::Mutable => match self.peek_type() {
                     TokenTypes::Semicolon => {
-                        dbg!(&var_dec);
                         return var_dec;
                     }
                     _ => {}
@@ -104,17 +175,14 @@ impl Parser {
             _ => {}
         }
 
-        // peek expects so current is Type
         self.expected_or_error(&TokenTypes::Assign, "=");
-        // advances to =
-        self.advance();
-        // advances to Expression
         self.advance();
 
-        // TODO:
-        // expects current to be Expression, errors if not
-        self.parse_expr();
-        //
+        self.expect_expr_or_error();
+        self.advance();
+
+        let expr = self.parse_compound_expr();
+        self.mutate_var_declaration(&mut var_dec, VarDecMutateOptions::Value(expr));
 
         self.expected_or_error(&TokenTypes::Semicolon, ";");
 
@@ -123,12 +191,119 @@ impl Parser {
         var_dec
     }
 
-    fn expected_or_error(&mut self, expected: &TokenTypes, expected_name: &str) {
-        if !self.peek_expect(expected) {
-            let def = self.current().to_owned();
-            let peek = self.peek().unwrap_or_else(|| &def).to_owned();
-            self.expected_error(expected_name, &peek);
-            exit(1)
+    fn parse_parentheses(&mut self) -> Expression {
+        // TODO: fix
+        while !self.current_type().eq(&TokenTypes::RightParenthesis) {
+            self.advance();
+            if self.current_type().eq(&TokenTypes::Semicolon)
+                || self.current_type().eq(&TokenTypes::EOF)
+            {
+                self.expected_error("Expression", self.current());
+            }
+            // parse primary | compound?
+            return self.parse_compound_expr();
+        }
+
+        self.expected_error(")", self.current());
+        exit(1)
+    }
+
+    fn parse_boolean_expr(&mut self) -> Expression {
+        unimplemented!()
+    }
+
+    fn parse_string_expr(&mut self) -> Expression {
+        unimplemented!()
+    }
+
+    fn parse_func_call(&mut self) -> Expression {
+        unimplemented!()
+    }
+
+    fn parse_square_brackets(&mut self) -> Expression {
+        unimplemented!()
+    }
+
+    fn parse_binary_expr(&mut self) -> Expression {
+        // allow accept , inside func() or arr[];
+        // allow_comma: bool;
+        let mut left: Expression = self.parse_primary_expr();
+
+        loop {
+            let updated_left = left;
+            self.advance();
+
+            let operator = self.current().to_owned();
+            if !self.is_binary_operator(&operator.token_type) {
+                self.expected_error("Operator or ;", &self.current());
+                exit(1)
+            }
+            self.advance();
+
+            match self.peek() {
+                None => {
+                    self.expected_error("Numeric literal", &self.current());
+                    exit(1)
+                }
+                _ => {}
+            }
+            let right = self.parse_primary_expr();
+
+            left = Expression::Binary {
+                left: Box::new(updated_left),
+                operator: operator.token_type,
+                right: Box::new(right),
+            };
+
+            if self.peek_expect(&TokenTypes::Semicolon) {
+                break;
+            }
+        }
+
+        left
+    }
+
+    fn parse_compound_expr(&mut self) -> Expression {
+        let token = self.current().to_owned();
+        let peek = self.peek().unwrap().to_owned();
+
+        if self.is_binary_operator(&peek.token_type) {
+            self.parse_binary_expr()
+        } else if token.token_type.eq(&TokenTypes::LeftParenthesis) {
+            // self.advance();
+            self.parse_parentheses()
+        } else {
+            self.parse_primary_expr()
+        }
+    }
+
+    fn parse_primary_expr(&mut self) -> Expression {
+        let token = self.current().to_owned();
+
+        match token.token_type {
+            TokenTypes::Identifier => self.parse_identifier(),
+            TokenTypes::NumberLiteral => Expression::Literal(token.token_value),
+            TokenTypes::StringLiteral => self.parse_string_expr(),
+            TokenTypes::True | TokenTypes::False => Expression::Literal(token.token_value),
+            TokenTypes::LeftParenthesis => self.parse_parentheses(),
+            TokenTypes::LeftSquareBracket => self.parse_square_brackets(),
+            TokenTypes::BinaryPlus => {
+                self.advance();
+                Expression::Literal(token.token_value)
+            }
+            TokenTypes::BinaryMinus => Expression::Unary {
+                operator: token.token_type,
+                operand: Box::new(Expression::Literal(token.token_value)),
+            },
+            TokenTypes::LogicalNot => self.parse_boolean_expr(),
+            TokenTypes::EOF => {
+                self.expected_error(";", &token);
+                exit(1)
+            }
+            _ => {
+                self.expected_error("Expression", &token);
+                exit(1)
+            }
         }
     }
 
@@ -136,19 +311,19 @@ impl Parser {
         match var_dec {
             Statement::VariableDeclaration { r#type, .. } => match self.peek_type() {
                 TokenTypes::Int => {
-                    *r#type = Some(TokenTypes::Int);
+                    *r#type = Some(VariableTypes::Int);
                 }
                 TokenTypes::Str => {
-                    *r#type = Some(TokenTypes::Str);
+                    *r#type = Some(VariableTypes::Str);
                 }
                 TokenTypes::Boo => {
-                    *r#type = Some(TokenTypes::Boo);
+                    *r#type = Some(VariableTypes::Boo);
                 }
                 TokenTypes::Nul => {
-                    *r#type = Some(TokenTypes::Nul);
+                    *r#type = Some(VariableTypes::Nul);
                 }
                 TokenTypes::Flo => {
-                    *r#type = Some(TokenTypes::Flo);
+                    *r#type = Some(VariableTypes::Flo);
                 }
                 TokenTypes::Arr => {
                     // *r#type = Some(TokenTypes::Int);
@@ -167,54 +342,10 @@ impl Parser {
         }
     }
 
-    fn parse_binary_expr(&mut self) -> Expression {
-        let mut left: Expression = Expression::Literal(self.current().token_value.to_owned());
-
-        //
-
-        left
-    }
-
-    fn determine_call(&mut self) -> Expression {
-        let identifier = self.current().to_owned();
-        self.advance();
-        let mut left_paren_count = 1;
-        let mut right_paren_count = 0;
-
-        let mut arg_list: Vec<Expression> = Vec::new();
-
-        while left_paren_count > right_paren_count {
-            self.advance();
-            match self.current_type() {
-                TokenTypes::LeftParenthesis => {
-                    left_paren_count += 1;
-                    // arg_list.push(self.current().to_owned())
-                }
-                TokenTypes::RightParenthesis => {
-                    right_paren_count += 1;
-                    // arg_list.push(self.current().to_owned())
-                }
-                TokenTypes::Semicolon | TokenTypes::EOF => {
-                    self.advance();
-                    break;
-                }
-                _ => arg_list.push(self.parse_expr()),
-            }
-        }
-
-        dbg!(&arg_list);
-
-        Expression::Call {
-            name: identifier.token_value.to_owned(),
-            arguments: Box::new(arg_list),
-        }
-    }
-
     fn parse_identifier(&mut self) -> Expression {
-        dbg!(&self.current());
         match self.current_type() {
             TokenTypes::Identifier => match self.peek_type() {
-                TokenTypes::LeftParenthesis => self.determine_call(),
+                TokenTypes::LeftParenthesis => self.parse_func_call(),
                 _ => Expression::Identifier(self.current().token_value.to_owned()),
             },
             _ => {
@@ -224,45 +355,8 @@ impl Parser {
         }
     }
 
-    fn parse_expr(&mut self) -> Expression {
-        match self.current_type() {
-            TokenTypes::Identifier => self.parse_identifier(),
-            TokenTypes::NumberLiteral => Expression::Literal(self.current().token_value.to_owned()),
-            TokenTypes::StringLiteral => Expression::Literal(self.current().token_value.to_owned()),
-            TokenTypes::LogicalNot => match self.peek_type() {
-                TokenTypes::True | TokenTypes::False => {
-                    let operator = self.current();
-                    Expression::Unary {
-                        operator: operator.token_type.to_owned(),
-                        operand: Box::new(Expression::Literal(
-                            self.current().token_value.to_owned(),
-                        )),
-                    }
-                }
-                TokenTypes::Identifier => {
-                    let operator = self.current().to_owned();
-                    self.advance();
-                    let operand = self.parse_identifier();
-
-                    Expression::Unary {
-                        operator: operator.token_type,
-                        operand: Box::new(operand),
-                    }
-                }
-                _ => {
-                    self.expected_error("Boo Expression", self.current());
-                    exit(1)
-                }
-            },
-            _ => {
-                self.expected_error("Expression", self.current());
-                exit(1)
-            }
-        }
-    }
-
-    fn is_binary_operator(&mut self, token: &Token) -> bool {
-        match token.token_type {
+    fn is_binary_operator(&self, token_type: &TokenTypes) -> bool {
+        match token_type {
             TokenTypes::BinaryPlus
             | TokenTypes::BinaryMinus
             | TokenTypes::BinaryDivision
