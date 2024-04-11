@@ -25,8 +25,8 @@ enum VarDecMutateOptions {
 //
 // 10 !Boo
 //
-// 9 +
-// 9 -
+// 9 + Num
+// 9 - Num
 //
 // 8 Bin * Bin
 // 8 Bin / Bin
@@ -247,7 +247,12 @@ impl Parser {
                 }
                 _ => {}
             }
-            let right = self.parse_primary_expr();
+            let mut right = self.parse_primary_expr();
+
+            let peek_type = self.peek_type().to_owned();
+            if self.get_prec(&operator.token_type) < self.get_prec(&peek_type) {
+                right = self.parse_binary_expr()
+            };
 
             left = Expression::Binary {
                 left: Box::new(updated_left),
@@ -274,6 +279,29 @@ impl Parser {
             self.parse_parentheses()
         } else {
             self.parse_primary_expr()
+        }
+    }
+
+    fn get_prec(&self, operator: &TokenTypes) -> u8 {
+        match operator {
+            TokenTypes::Assign
+            | TokenTypes::AssignPlus
+            | TokenTypes::AssignMinus
+            | TokenTypes::AssignMultiply
+            | TokenTypes::AssignDivision
+            | TokenTypes::AssignRest => 2,
+            TokenTypes::LogicalOr => 3,
+            TokenTypes::LogicalAnd => 4,
+            TokenTypes::LogicalEquals | TokenTypes::LogicalDifferent => 5,
+            TokenTypes::LogicalSmallerOrEqualsThan
+            | TokenTypes::LogicalSmallerThan
+            | TokenTypes::LogicalGreaterThan
+            | TokenTypes::LogicalGreaterOrEqualsThan => 6,
+            TokenTypes::BinaryPlus | TokenTypes::BinaryMinus => 7,
+            TokenTypes::BinaryMultiply | TokenTypes::BinaryDivision | TokenTypes::BinaryRest => 8,
+            TokenTypes::LogicalNot => 10,
+            TokenTypes::LeftParenthesis => 12,
+            _ => 0,
         }
     }
 

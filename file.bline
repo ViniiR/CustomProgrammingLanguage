@@ -1,1 +1,1 @@
-let bar: Int = 10 + 9 * 1,
+let bar: Int = 10 + 9 * 1 + 10;
