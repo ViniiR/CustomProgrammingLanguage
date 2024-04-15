@@ -297,11 +297,21 @@ pub enum Expression {
         operator: TokenTypes,
         right: Box<Expression>,
     },
+    Logical {
+        left: Box<Expression>,
+        operator: TokenTypes,
+        right: Box<Expression>,
+    },
     Unary {
         operator: TokenTypes,
         operand: Box<Expression>,
     },
-    Literal(String),
+    Literal {
+        r#type: LiteralTypes,
+        // wrong: this should be expression TODO:
+        // i have no idea what ^ is talking about but i wont remove it
+        value: String,
+    },
     Call {
         name: String,
         arguments: Box<Vec<Expression>>,
@@ -309,6 +319,14 @@ pub enum Expression {
     Identifier(String),
 }
 
+#[derive(Debug, Clone)]
+pub enum LiteralTypes {
+    Numeric,
+    String,
+    Array,
+    Boolean,
+    Null,
+}
 #[derive(Debug)]
 pub enum VariableTypes {
     Int,
@@ -331,5 +349,23 @@ pub enum Statement {
         kind: VarDeclarationKind,
         r#type: Option<VariableTypes>,
         value: Option<Expression>,
+    },
+    VariableAlteration {
+        start: Start,
+        name: String,
+        value: Expression,
+    },
+    If {
+        start: Start,
+        condition: Expression,
+    },
+    For {
+        start: Start,
+        // index should ALWAYS be a VariableDeclaration
+        index: Box<Statement>,
+        // test should be a logical expression
+        test: Expression,
+        // index_update should be a VariableAlteration
+        index_update: Box<Statement>,
     },
 }
