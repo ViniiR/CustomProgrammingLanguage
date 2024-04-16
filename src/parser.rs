@@ -1,8 +1,8 @@
 use crate::{
     error, report,
     types::{
-        Expression, LiteralTypes, Start, Statement, Token, TokenTypes, VarDeclarationKind,
-        VariableTypes,
+        ArrayAccess, Expression, FuncParam, LiteralTypes, Start, Statement, Token, TokenTypes,
+        VarDeclarationKind, VariableTypes,
     },
 };
 use std::{iter::Peekable, process::exit};
@@ -18,6 +18,12 @@ pub struct Parser {
 enum VarDecMutateOptions {
     Name,
     Value(Expression),
+}
+
+#[derive(Debug)]
+enum Loop {
+    Yes,
+    No,
 }
 
 // operator precedence
@@ -61,8 +67,6 @@ enum VarDecMutateOptions {
 // 1 , separator (10,10+10)
 
 impl Parser {
-    const HAS_MASTER_FUNC: bool = false;
-
     pub fn new(token_vector: Vec<Token>) -> Self {
         let mut iterator = token_vector.into_iter().peekable();
         Self {
@@ -85,7 +89,7 @@ impl Parser {
         }
     }
 
-    // error fixme
+    /// peeks next token and exits if its not a valid expr
     fn expect_expr_or_error(&mut self) {
         match self.peek_type() {
             TokenTypes::Identifier
@@ -96,6 +100,7 @@ impl Parser {
             | TokenTypes::LogicalNot
             | TokenTypes::True
             | TokenTypes::False
+            | TokenTypes::LeftSquareBracket
             | TokenTypes::LeftParenthesis => {}
             TokenTypes::EOF => {
                 let current = self.current().to_owned();
@@ -113,6 +118,7 @@ impl Parser {
         }
     }
 
+    /// peeks next token and exit if its not of given type
     fn expected_or_error(&mut self, expected: &TokenTypes, expected_name: &str) {
         if !self.peek_expect(expected) {
             let def = self.current().to_owned();
@@ -165,23 +171,31 @@ impl Parser {
         self.advance();
 
         self.determine_var_type(&mut var_dec);
-        self.advance();
+        // self.advance();
 
         match &var_dec {
             Statement::VariableDeclaration { kind, .. } => match kind {
-                VarDeclarationKind::Mutable => match self.peek_type() {
+                VarDeclarationKind::Mutable => match self.current_type() {
                     TokenTypes::Semicolon => {
                         return var_dec;
                     }
-                    _ => {}
+                    TokenTypes::Assign => {}
+                    _ => {
+                        self.unexpected_token_error(self.current());
+                        exit(1)
+                    }
                 },
                 _ => {}
             },
             _ => {}
         }
 
-        self.expected_or_error(&TokenTypes::Assign, "=");
-        self.advance();
+        if !self.current_type().eq(&TokenTypes::Assign) {
+            self.expected_error("=", self.current());
+            exit(1)
+        }
+        // self.expected_or_error(&TokenTypes::Assign, "=");
+        // self.advance();
 
         self.expect_expr_or_error();
         self.advance();
@@ -190,8 +204,7 @@ impl Parser {
         self.mutate_var_declaration(&mut var_dec, VarDecMutateOptions::Value(expr));
 
         self.expected_or_error(&TokenTypes::Semicolon, ";");
-
-        dbg!(&var_dec);
+        self.advance();
 
         var_dec
     }
@@ -314,7 +327,7 @@ impl Parser {
     }
 
     fn parse_multiplicative_expr(&mut self) -> Expression {
-        let mut left = self.parse_primary_expr();
+        let mut left = self.parse_unary_expr();
 
         while self.peek_type().eq(&TokenTypes::BinaryMultiply)
             || self.peek_type().eq(&TokenTypes::BinaryDivision)
@@ -325,8 +338,6 @@ impl Parser {
             let operator = self.current().to_owned();
             self.advance();
 
-            // TODO: change this
-            dbg!(self.current());
             let right = self.parse_primary_expr();
 
             left = Expression::Binary {
@@ -339,244 +350,131 @@ impl Parser {
         left
     }
 
-    fn parse_boolean_expr(&mut self) -> Expression {
-        unimplemented!()
+    fn parse_unary_expr(&mut self) -> Expression {
+        match self.current_type() {
+            TokenTypes::BinaryPlus => {
+                self.advance();
+                self.parse_unary_expr()
+            }
+            TokenTypes::BinaryMinus => {
+                self.advance();
+                Expression::Unary {
+                    operator: self.current_type().to_owned(),
+                    operand: Box::new(self.parse_unary_expr()),
+                }
+            }
+            TokenTypes::LogicalNot => {
+                self.advance();
+                Expression::Unary {
+                    operator: TokenTypes::LogicalNot,
+                    operand: Box::new(self.parse_unary_expr()),
+                }
+            }
+            _ => self.parse_primary_expr(),
+        }
     }
 
     fn parse_func_call(&mut self) -> Expression {
-        unimplemented!()
+        let name = self.current().to_owned();
+        // (
+        self.advance();
+        // arg 1 | )
+        self.advance();
+
+        let mut arg_vec: Vec<Expression> = Vec::new();
+        let mut expr: Expression;
+
+        while !self.current_type().eq(&TokenTypes::RightParenthesis) {
+            if self.current_type().eq(&TokenTypes::EOF)
+                || self.current_type().eq(&TokenTypes::Semicolon)
+            {
+                break;
+            }
+
+            if self.current_type().eq(&TokenTypes::Comma) {
+                if self.peek_expect(&TokenTypes::Comma) {
+                    let peek = self.peek().unwrap().to_owned();
+                    self.unexpected_token_error(&peek);
+                    exit(1)
+                }
+                self.advance();
+                continue;
+            }
+
+            expr = self.parse_expr();
+            if self.peek_expect(&TokenTypes::Comma)
+                || self.peek_expect(&TokenTypes::RightParenthesis)
+            {
+                arg_vec.push(expr);
+                self.advance();
+            } else {
+                self.advance();
+                self.expected_error(",", self.current());
+                exit(1)
+            }
+        }
+
+        if !self.current_type().eq(&TokenTypes::RightParenthesis) {
+            self.expected_error(")", self.current());
+        }
+        if arg_vec.len() == 0 {
+            return Expression::Call {
+                name: name.token_value,
+                arguments: None,
+            };
+        }
+
+        Expression::Call {
+            name: name.token_value,
+            arguments: Some(Box::new(arg_vec)),
+        }
     }
 
     fn parse_square_brackets(&mut self) -> Expression {
-        unimplemented!()
-    }
+        self.advance();
 
-    // fn oldparse_binary_expr(&mut self) -> Expression {
-    //     // allow accept , inside func() or arr[];
-    //     // allow_comma: bool;
-    //     let mut left: Expression = self.parse_primary_expr();
-    //
-    //     let is_parenthesis = self.current_type().eq(&TokenTypes::LeftParenthesis);
-    //
-    //     loop {
-    //         let updated_left = left;
-    //         self.advance();
-    //
-    //         let operator = self.current().to_owned();
-    //         if !self.is_binary_operator(&operator.token_type)
-    //             && (!is_parenthesis && !self.current_type().eq(&TokenTypes::RightParenthesis))
-    //         {
-    //             self.expected_error("Operator or ;", &self.current());
-    //             exit(1)
-    //         }
-    //         self.advance();
-    //
-    //         match self.peek() {
-    //             None => {
-    //                 self.expected_error("Numeric literal", &self.current());
-    //                 exit(1)
-    //             }
-    //             _ => {}
-    //         }
-    //         dbg!(self.current());
-    //         let mut right = self.parse_primary_expr();
-    //
-    //         let peek_type = self.peek_type().to_owned();
-    //         if self.get_prec(&peek_type) > self.get_prec(&operator.token_type)
-    //             || (is_parenthesis && self.get_prec(&peek_type) > 11)
-    //         {
-    //             dbg!(self.current());
-    //             right = self.parse_binary_expr()
-    //         };
-    //
-    //         if operator.token_type.eq(&TokenTypes::LogicalOr)
-    //             || operator.token_type.eq(&TokenTypes::LogicalAnd)
-    //         {
-    //             left = Expression::Logical {
-    //                 left: Box::new(updated_left),
-    //                 operator: operator.token_type,
-    //                 right: Box::new(right),
-    //             };
-    //         } else {
-    //             left = Expression::Binary {
-    //                 left: Box::new(updated_left),
-    //                 operator: operator.token_type,
-    //                 right: Box::new(right),
-    //             };
-    //         }
-    //
-    //         if is_parenthesis && self.peek_expect(&TokenTypes::RightParenthesis) {
-    //             self.advance();
-    //             if self.peek_expect(&TokenTypes::Semicolon) {
-    //                 break;
-    //             }
-    //         } else if self.peek_expect(&TokenTypes::Semicolon) {
-    //             break;
-    //         }
-    //     }
-    //     dbg!(self.current_type());
-    //
-    //     left
-    // }
+        let mut expr_vec: Vec<Expression> = Vec::new();
+        let mut expr: Expression;
 
-    // fn parse_compound_expr(&mut self) -> Expression {
-    //     let token = self.current().to_owned();
-    //     let peek = self.peek().unwrap().to_owned();
-    //
-    //     if self.is_binary_operator(&peek.token_type) {
-    //         let expr = self.parse_primary_expr();
-    //         self.parse_binary_expr(self.get_prec(&peek.token_type), expr)
-    //     } else {
-    //         self.parse_primary_expr()
-    //     }
-    // }
-    //
-    // fn parse_binary_expr(&mut self, prec: u8, left_expr: Expression) -> Expression {
-    //     let is_paren = prec == 12;
-    //
-    //     let mut expr = left_expr;
-    //
-    //     loop {
-    //         let left = expr;
-    //         self.advance();
-    //
-    //         let operator = self.current().to_owned();
-    //
-    //         if !self.is_binary_operator(&operator.token_type) {
-    //             self.expected_error("Binary Operator", &operator);
-    //             exit(1)
-    //         }
-    //
-    //         let right: Expression;
-    //
-    //         let peek = self.peek_type().to_owned();
-    //         if self.get_prec(&peek) > prec {
-    //             let prec = self.get_prec(&peek);
-    //             right = self.parse_binary_expr(prec, left.to_owned());
-    //         } else {
-    //             right = self.parse_primary_expr();
-    //         }
-    //
-    //         if operator.token_type.eq(&TokenTypes::LogicalOr)
-    //             || operator.token_type.eq(&TokenTypes::LogicalAnd)
-    //         {
-    //             expr = Expression::Logical {
-    //                 left: Box::new(left),
-    //                 operator: operator.token_type,
-    //                 right: Box::new(right),
-    //             };
-    //         } else {
-    //             expr = Expression::Binary {
-    //                 left: Box::new(left),
-    //                 operator: operator.token_type,
-    //                 right: Box::new(right),
-    //             };
-    //         }
-    //         break;
-    //     }
-    //
-    //     expr
-    // }
+        while !self.current_type().eq(&TokenTypes::RightSquareBracket) {
+            if self.current_type().eq(&TokenTypes::EOF)
+                || self.current_type().eq(&TokenTypes::Semicolon)
+            {
+                break;
+            }
 
-    // fn oldoldparse_binary_expr(&mut self, prec: u8, left_expr: Option<Expression>) -> Expression {
-    //     let is_paren = prec == 12;
-    //     let is_array = self.current_type().eq(&TokenTypes::LeftSquareBracket);
-    //
-    //     // if is_paren | is_array {}
-    //
-    //     let mut left = if let Some(l) = left_expr.to_owned() {
-    //         l
-    //     } else {
-    //         self.parse_primary_expr()
-    //     };
-    //
-    //     loop {
-    //         let new_left = left;
-    //         match left_expr {
-    //             Some(_) => {}
-    //             None => {
-    //                 self.advance();
-    //             }
-    //         }
-    //
-    //         if self.current_type().eq(&TokenTypes::Semicolon) {
-    //             left = new_left;
-    //             break;
-    //         }
-    //         dbg!(self.current());
-    //         let mut operator = self.current().to_owned();
-    //         self.advance();
-    //
-    //         if !self.is_binary_operator(&operator.token_type) {
-    //             if operator.token_type.eq(&TokenTypes::RightParenthesis) {
-    //                 self.advance();
-    //                 operator = self.current().to_owned();
-    //             } else if operator.token_type.eq(&TokenTypes::Semicolon) {
-    //                 dbg!(&new_left);
-    //             } else {
-    //                 self.expected_error("Operator", &operator);
-    //             }
-    //         }
-    //
-    //         let mut right = self.parse_primary_expr();
-    //         let peek_token = self.peek().unwrap().to_owned();
-    //         if self.get_prec(&peek_token.token_type) > prec {
-    //             right = self.parse_binary_expr(self.get_prec(&peek_token.token_type), None);
-    //         }
-    //
-    //         if operator.token_type.eq(&TokenTypes::LogicalOr)
-    //             || operator.token_type.eq(&TokenTypes::LogicalAnd)
-    //         {
-    //             left = Expression::Logical {
-    //                 left: Box::new(new_left),
-    //                 operator: operator.token_type,
-    //                 right: Box::new(right),
-    //             };
-    //         } else {
-    //             left = Expression::Binary {
-    //                 left: Box::new(new_left),
-    //                 operator: operator.token_type,
-    //                 right: Box::new(right),
-    //             };
-    //         }
-    //
-    //         dbg!(self.current());
-    //         if is_paren && self.peek_expect(&TokenTypes::RightSquareBracket)
-    //             || (is_array && self.peek_expect(&TokenTypes::RightParenthesis))
-    //         {
-    //             self.advance();
-    //         }
-    //
-    //         // remove
-    //         if !is_array && !is_paren && self.peek_expect(&TokenTypes::Semicolon) {
-    //             break;
-    //         }
-    //     }
-    //
-    //     dbg!(self.current());
-    //     left
-    // }
+            if self.current_type().eq(&TokenTypes::Comma) {
+                if self.peek_expect(&TokenTypes::Comma) {
+                    let peek = self.peek().unwrap().to_owned();
+                    self.unexpected_token_error(&peek);
+                    exit(1)
+                }
+                self.advance();
+                continue;
+            }
 
-    fn get_prec(&self, operator: &TokenTypes) -> u8 {
-        match operator {
-            TokenTypes::Assign
-            | TokenTypes::AssignPlus
-            | TokenTypes::AssignMinus
-            | TokenTypes::AssignMultiply
-            | TokenTypes::AssignDivision
-            | TokenTypes::AssignRest => 2,
-            TokenTypes::LogicalOr => 3,
-            TokenTypes::LogicalAnd => 4,
-            TokenTypes::LogicalEquals | TokenTypes::LogicalDifferent => 5,
-            TokenTypes::LogicalSmallerOrEqualsThan
-            | TokenTypes::LogicalSmallerThan
-            | TokenTypes::LogicalGreaterThan
-            | TokenTypes::LogicalGreaterOrEqualsThan => 6,
-            TokenTypes::BinaryPlus | TokenTypes::BinaryMinus => 7,
-            TokenTypes::BinaryMultiply | TokenTypes::BinaryDivision | TokenTypes::BinaryRest => 8,
-            TokenTypes::LogicalNot => 10,
-            TokenTypes::LeftParenthesis => 12,
-            _ => 0,
+            expr = self.parse_expr();
+            if self.peek_expect(&TokenTypes::Comma)
+                || self.peek_expect(&TokenTypes::RightSquareBracket)
+            {
+                expr_vec.push(expr);
+                self.advance();
+            } else {
+                self.advance();
+                self.expected_error(",", self.current());
+                exit(1)
+            }
+        }
+
+        if !self.current_type().eq(&TokenTypes::RightSquareBracket) {
+            self.expected_error("]", self.current());
+        }
+        if expr_vec.len() == 0 {
+            return Expression::ArrayLiteral { elements: None };
+        }
+
+        Expression::ArrayLiteral {
+            elements: Some(Box::new(expr_vec)),
         }
     }
 
@@ -589,30 +487,48 @@ impl Parser {
             self.expected_error(")", &current);
         }
         expr
-        // self.advance();
-        // let peek = self.peek_type().to_owned();
-        // let mut expr: Expression;
-        // if self.is_binary_operator(&peek) {
-        //     dbg!(self.current());
-        //     unimplemented!();
-        //     // expr = self.parse_binary_expr(12);
-        // } else {
-        //     expr = self.parse_primary_expr();
-        // }
-        // self.expected_or_error(&TokenTypes::RightParenthesis, ")");
-        // self.advance();
-        // let peek_type = self.peek_type().to_owned();
-        // if !peek_type.eq(&TokenTypes::Semicolon) && self.is_binary_operator(&peek_type) {
-        //     self.advance();
-        //     let current = self.current_type().to_owned();
-        //     let left_expr = self.parse_primary_expr();
-        //     expr = self.parse_binary_expr(self.get_prec(&current), left_expr)
-        // }
-        //
-        // expr
     }
 
-    // i ain't got no fucking idea of how to do this shit, goodluck
+    fn parse_array_access(&mut self) -> Expression {
+        let name = self.current().token_value.to_owned();
+        let mut index: Expression;
+
+        let mut arr_access: Option<ArrayAccess> = None;
+
+        while self.peek_expect(&TokenTypes::LeftSquareBracket) {
+            self.advance();
+
+            self.expect_expr_or_error();
+            self.advance();
+            index = self.parse_expr();
+            self.advance();
+
+            if !self.current_type().eq(&TokenTypes::RightSquareBracket) {
+                self.expected_error("]", self.current());
+                exit(1)
+            }
+
+            arr_access = match arr_access {
+                Some(acc) => Some(ArrayAccess::NestedAccess {
+                    access: Box::new(acc),
+                    index: Box::new(index),
+                }),
+                None => Some(ArrayAccess::Access {
+                    name: name.to_owned(),
+                    index: Box::new(index),
+                }),
+            };
+        }
+
+        match arr_access {
+            Some(acc) => Expression::ArrayAccess(acc),
+            None => {
+                eprintln!("Expected Array access token, found internal error");
+                exit(1)
+            }
+        }
+    }
+
     fn parse_primary_expr(&mut self) -> Expression {
         let token = self.current().to_owned();
 
@@ -632,23 +548,29 @@ impl Parser {
             },
             TokenTypes::LeftParenthesis => self.parse_parentheses(),
             TokenTypes::LeftSquareBracket => self.parse_square_brackets(),
-            TokenTypes::BinaryPlus => {
-                self.advance();
-                self.parse_expr()
-            }
-            TokenTypes::BinaryMinus => {
-                self.advance();
-
-                Expression::Unary {
-                    operator: token.token_type,
-                    operand: Box::new(self.parse_expr()),
-                }
-            }
+            // TokenTypes::BinaryPlus => {
+            //     self.advance();
+            //     self.parse_expr()
+            // }
+            // TokenTypes::BinaryMinus => {
+            //     self.advance();
+            //
+            //     Expression::Unary {
+            //         operator: token.token_type,
+            //         operand: Box::new(self.parse_expr()),
+            //     }
+            // }
+            // TokenTypes::LogicalNot => {
+            //     self.advance();
+            //     Expression::Unary {
+            //         operator: TokenTypes::LogicalNot,
+            //         operand: Box::new(self.parse_expr()),
+            //     }
+            // }
             TokenTypes::Null => Expression::Literal {
                 r#type: LiteralTypes::Null,
                 value: self.current().token_value.to_owned(),
             },
-            TokenTypes::LogicalNot => self.parse_boolean_expr(),
             TokenTypes::EOF => {
                 self.expected_error(";", &token);
                 exit(1)
@@ -660,32 +582,133 @@ impl Parser {
         }
     }
 
+    fn make_array_type(&mut self) -> VariableTypes {
+        self.advance();
+        match self.current_type() {
+            TokenTypes::Int => VariableTypes::Int,
+            TokenTypes::Str => VariableTypes::Str,
+            TokenTypes::Boo => VariableTypes::Boo,
+            TokenTypes::Nul => VariableTypes::Nul,
+            TokenTypes::Flo => VariableTypes::Flo,
+            TokenTypes::Arr => {
+                if !self.peek_expect(&TokenTypes::LogicalSmallerThan) {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Arr type must be generic, Arr<Type>"),
+                    );
+                    exit(1)
+                }
+
+                self.advance();
+                let r#type = self.make_array_type();
+                self.expected_or_error(&TokenTypes::LogicalGreaterThan, ">");
+                self.advance();
+                VariableTypes::Arr(Box::new(r#type))
+            }
+            _ => {
+                self.unexpected_token_error(self.current());
+                exit(1)
+            }
+        }
+    }
+
+    fn get_generic_type(&mut self) -> VariableTypes {
+        // Type
+        // peek < | unknown
+        match self.current().token_type {
+            TokenTypes::Int => VariableTypes::Int,
+            TokenTypes::Str => VariableTypes::Str,
+            TokenTypes::Boo => VariableTypes::Boo,
+            TokenTypes::Nul => VariableTypes::Nul,
+            TokenTypes::Flo => VariableTypes::Flo,
+            TokenTypes::Arr => {
+                if !self.peek_expect(&TokenTypes::LogicalSmallerThan) {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Arr type must be generic, Arr<Type>"),
+                    );
+                    exit(1)
+                }
+                self.advance();
+                self.advance();
+
+                let r#type = self.get_generic_type();
+
+                self.expected_or_error(&TokenTypes::LogicalGreaterThan, ">");
+                self.advance();
+
+                VariableTypes::Arr(Box::new(r#type))
+            }
+            _ => {
+                self.unexpected_token_error(self.current());
+                exit(1)
+            }
+        }
+    }
+
+    fn get_type(&mut self) -> VariableTypes {
+        match self.current_type() {
+            TokenTypes::Int => VariableTypes::Int,
+            TokenTypes::Str => VariableTypes::Str,
+            TokenTypes::Boo => VariableTypes::Boo,
+            TokenTypes::Nul => VariableTypes::Nul,
+            TokenTypes::Flo => VariableTypes::Flo,
+            TokenTypes::Arr => {
+                self.expected_or_error(&TokenTypes::LogicalSmallerThan, "<");
+                self.advance();
+                self.advance();
+                let r#type = self.get_generic_type();
+                dbg!(self.current());
+                self.expected_or_error(&TokenTypes::LogicalGreaterThan, ">");
+                self.advance();
+                VariableTypes::Arr(Box::new(r#type))
+            }
+            _ => {
+                self.expected_error("Type", self.current());
+                exit(1)
+            }
+        }
+    }
+
     fn determine_var_type(&mut self, var_dec: &mut Statement) {
         match var_dec {
             Statement::VariableDeclaration { r#type, .. } => match self.peek_type() {
                 TokenTypes::Int => {
+                    self.advance();
+                    self.advance();
                     *r#type = Some(VariableTypes::Int);
                 }
                 TokenTypes::Str => {
+                    self.advance();
+                    self.advance();
                     *r#type = Some(VariableTypes::Str);
                 }
                 TokenTypes::Boo => {
+                    self.advance();
+                    self.advance();
                     *r#type = Some(VariableTypes::Boo);
                 }
                 TokenTypes::Nul => {
+                    self.advance();
+                    self.advance();
                     *r#type = Some(VariableTypes::Nul);
                 }
                 TokenTypes::Flo => {
+                    self.advance();
+                    self.advance();
                     *r#type = Some(VariableTypes::Flo);
                 }
                 TokenTypes::Arr => {
-                    // *r#type = Some(TokenTypes::Int);
-                    // handle generics
+                    *r#type = Some(self.make_array_type());
+                    self.advance();
                 }
                 _ => {
                     let def = &self.current().to_owned();
                     let peek = &self.peek().unwrap_or_else(|| &def).to_owned();
                     self.expected_error("Type", peek);
+                    exit(1)
                 }
             },
             _ => {
@@ -699,6 +722,7 @@ impl Parser {
         match self.current_type() {
             TokenTypes::Identifier => match self.peek_type() {
                 TokenTypes::LeftParenthesis => self.parse_func_call(),
+                TokenTypes::LeftSquareBracket => self.parse_array_access(),
                 _ => Expression::Identifier(self.current().token_value.to_owned()),
             },
             _ => {
@@ -724,18 +748,212 @@ impl Parser {
     }
 
     fn parse_call_statement(&mut self) -> Statement {
-        unimplemented!()
+        let call = self.parse_func_call();
+
+        if !self.peek_expect(&TokenTypes::Semicolon) {
+            let peek = self.peek().unwrap().to_owned();
+            self.expected_error(";", &peek);
+            exit(1)
+        }
+
+        self.advance();
+
+        Statement::FunctionCall(call)
     }
 
     fn parse_var_mutation(&mut self) -> Statement {
+        let name = self.current().token_value.to_owned();
+        self.advance();
+
+        let operator = self.current().to_owned();
+        self.advance();
+
+        let expr = self.parse_expr();
+
+        if !self.peek_expect(&TokenTypes::Semicolon) {
+            let peek = self.peek().unwrap().to_owned();
+            self.expected_error(";", &peek);
+            exit(1)
+        }
+        self.advance();
+        self.advance();
+
+        Statement::VariableAlteration {
+            name,
+            value: expr,
+            operator: operator.token_type,
+        }
+    }
+
+    fn parse_params(&mut self) -> Vec<FuncParam> {
+        // (
+        self.advance();
+        // foo: Int,
+        let mut params: Vec<FuncParam> = Vec::new();
+
+        let mut param: FuncParam;
+
+        if self.current_type().eq(&TokenTypes::RightParenthesis) {
+            return params;
+        }
+
+        while !self.peek_expect(&TokenTypes::RightParenthesis)
+            || !self.peek_expect(&TokenTypes::Semicolon)
+            || !self.peek_expect(&TokenTypes::EOF)
+        {
+            if !self.current_type().eq(&TokenTypes::Identifier) {
+                self.expected_error("Identifier", self.current());
+                exit(1)
+            }
+
+            let name = self.current().to_owned().token_value;
+
+            self.expected_or_error(&TokenTypes::Colon, ":");
+            self.advance();
+            self.advance();
+
+            let r#type: VariableTypes = self.get_type();
+            self.advance();
+            // after closing >, likely a , or )
+
+            param = FuncParam { name, r#type };
+
+            if self.current_type().eq(&TokenTypes::RightParenthesis) {
+                params.push(param.to_owned());
+                break;
+            } else if self.current_type().eq(&TokenTypes::Comma) {
+                params.push(param.to_owned());
+                self.advance();
+            } else {
+                self.expected_error(", or )", self.current());
+                exit(1)
+            }
+        }
+
+        if !self.current_type().eq(&TokenTypes::RightParenthesis) {
+            self.expected_error(")", self.current());
+            exit(1)
+        }
+
+        params
+    }
+
+    fn parse_function_statement(&mut self) -> Statement {
+        let func_tk = self.current().to_owned();
+
+        self.expected_or_error(&TokenTypes::Identifier, "Identifier");
+        self.advance();
+
+        let name = self.current().to_owned();
+
+        self.expected_or_error(&TokenTypes::LeftParenthesis, "(");
+        self.advance();
+        // current (
+        let param_vec: Vec<FuncParam> = self.parse_params();
+        // current )
+
+        self.expected_or_error(&TokenTypes::Colon, ":");
+        // current  )
+        self.advance();
+        // current  :
+        self.advance();
+
+        // current == Type | unknown
+        let r#type: VariableTypes = self.get_type();
+
+        self.expected_or_error(&TokenTypes::LeftCurlyBrace, "{");
+        self.advance();
+
+        let body_block: Option<Vec<Statement>> = self.parse_block(&Loop::No);
+
+        self.expected_or_error(&TokenTypes::Semicolon, ";");
+        self.advance();
+
+        Statement::FunctionDeclaration {
+            start: Start {
+                line: func_tk.line_number,
+                column: func_tk.column_number,
+            },
+            name: name.token_value,
+            params: if param_vec.len() > 0 {
+                Some(param_vec)
+            } else {
+                None
+            },
+            r#type,
+            body: match body_block {
+                Some(b) => Some(Box::new(b)),
+                _ => None,
+            },
+        }
+    }
+
+    fn parse_if_stmt(&mut self, is_loop: &Loop) -> Statement {
+        let first = self.current().to_owned();
+
+        self.expect_expr_or_error();
+        self.advance();
+
+        let expression = self.parse_expr();
+
+        self.peek_expect(&TokenTypes::LeftCurlyBrace);
+        self.advance();
+
+        let block = self.parse_block(is_loop);
+
+        match self.peek_type() {
+            TokenTypes::Semicolon => {
+                self.advance();
+                self.advance();
+                return Statement::If {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    condition: expression,
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                };
+            }
+            TokenTypes::ElseIf => {
+                unimplemented!()
+            }
+            TokenTypes::Else => {
+                unimplemented!()
+            }
+            _ => {
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error("; or elseif or else", &peek);
+                exit(1)
+            }
+        }
+    }
+
+    fn parse_loop_controls(&mut self) -> Statement {
         unimplemented!()
     }
 
-    pub fn parse(&mut self) {
+    /// parse { ... }
+    fn parse_block(&mut self, is_loop: &Loop) -> Option<Vec<Statement>> {
+        // current {
+        self.advance();
+        // inside block
+        let mut block_stmts: Vec<Statement> = Vec::new();
+
+        let mut stmt: Statement;
+
         while !self.current_type().eq(&TokenTypes::EOF) {
-            let ast_node = match &self.current_type() {
+            if self.current_type().eq(&TokenTypes::RightCurlyBrace) {
+                break;
+            }
+
+            stmt = match self.current_type() {
                 TokenTypes::ConstantVariable | TokenTypes::MutableVariable => {
-                    self.parse_var_declaration()
+                    let dec = self.parse_var_declaration();
+                    self.advance();
+                    dec
                 }
                 TokenTypes::Identifier => {
                     let peek = self.peek().unwrap().to_owned();
@@ -744,11 +962,51 @@ impl Parser {
                     } else if self.is_assign_operator(&peek.token_type) {
                         self.parse_var_mutation()
                     } else {
-                        self.unexpected_token_error(&peek);
+                        self.unexpected_token_error(&self.current());
                         exit(1)
                     }
                 }
-                TokenTypes::Semicolon | TokenTypes::Comment => {
+                TokenTypes::Function => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Functions cannot be defined inside functions"),
+                    );
+                    exit(1)
+                }
+                TokenTypes::Continue | TokenTypes::Break => match is_loop {
+                    Loop::Yes => self.parse_loop_controls(),
+                    _ => {
+                        report(
+                            self.current().line_number,
+                            self.current().column_number,
+                            String::from("Loop controls cannot be used outside of loops"),
+                        );
+                        exit(1)
+                    }
+                },
+                TokenTypes::If => self.parse_if_stmt(is_loop),
+                TokenTypes::ElseIf => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Dangling elseif statement"),
+                    );
+                    exit(1)
+                }
+                TokenTypes::Else => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Dangling else statement"),
+                    );
+                    exit(1)
+                }
+                TokenTypes::Semicolon => {
+                    self.unexpected_token_error(self.current());
+                    exit(1)
+                }
+                TokenTypes::Comment => {
                     self.advance();
                     continue;
                 }
@@ -757,9 +1015,67 @@ impl Parser {
                     exit(1)
                 }
             };
+
+            block_stmts.push(stmt);
+        }
+        // current }
+
+        if !self.current_type().eq(&TokenTypes::RightCurlyBrace) {
+            report(
+                self.current().line_number,
+                self.current().column_number,
+                String::from("Unclosed block"),
+            );
+            exit(1)
+        }
+
+        if block_stmts.len() == 0 {
+            None
+        } else {
+            Some(block_stmts)
+        }
+    }
+
+    pub fn parse_tokens(&mut self) {
+        while !self.current_type().eq(&TokenTypes::EOF) {
+            let ast_node = match &self.current_type() {
+                // TokenTypes::ConstantVariable | TokenTypes::MutableVariable => {
+                //     self.parse_var_declaration()
+                // }
+                // TokenTypes::Identifier => {
+                //     let peek = self.peek().unwrap().to_owned();
+                //     if self.peek_expect(&TokenTypes::LeftParenthesis) {
+                //         self.parse_call_statement()
+                //     } else if self.is_assign_operator(&peek.token_type) {
+                //         self.parse_var_mutation()
+                //     } else {
+                //         self.unexpected_token_error(&self.current());
+                //         exit(1)
+                //     }
+                // }
+                TokenTypes::Function => self.parse_function_statement(),
+                TokenTypes::Semicolon => {
+                    self.unexpected_token_error(self.current());
+                    exit(1)
+                }
+                TokenTypes::Comment => {
+                    self.advance();
+                    continue;
+                }
+                _ => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Only functions can be defined outside of a block"),
+                    );
+                    // self.unknown_error(&self.current_token);
+                    exit(1)
+                }
+            };
             self.push_statement(ast_node);
             self.advance();
         }
+        dbg!(&self.abstract_syntax_tree);
     }
 
     fn is_assign_operator(&self, operator: &TokenTypes) -> bool {
@@ -778,7 +1094,7 @@ impl Parser {
         report(
             token.line_number,
             token.column_number,
-            String::from("Unexpected token"),
+            format!("Unexpected token '{}'", token.token_type),
         );
     }
 
@@ -804,6 +1120,7 @@ impl Parser {
         }
     }
 
+    /// if peek token is of given type, return true
     fn peek_expect(&mut self, expected: &TokenTypes) -> bool {
         self.peek_type().eq(expected)
     }

@@ -475,6 +475,7 @@ fn determine_alphabetic_token_type(token: &str) -> TType {
         "elseif" => TType::ElseIf,
         "else" => TType::Else,
         "brk" => TType::Break,
+        "cnt" => TType::Continue,
         "ret" => TType::Return,
         "for" => TType::For,
         _ => TType::Identifier,

@@ -3,7 +3,6 @@ mod parser;
 mod types;
 
 use std::io::Write;
-use std::path::Path;
 use std::{
     env, fs,
     io::{stdin, stdout},
@@ -51,26 +50,26 @@ fn main() {
 
     let filename: &str = &args[1];
 
-    match Path::new(filename).extension() {
-        Some(ext) => {
-            let ext = ext.to_str().unwrap_or("").to_lowercase();
-            if ext != "bline" {
-                eprintln!("Err: Wrong File type");
-                exit(1);
-            }
-        }
-        None => {
-            eprintln!("Err: Wrong File type");
-            exit(1);
-        }
-    }
+    // match Path::new(filename).extension() {
+    //     Some(ext) => {
+    //         let ext = ext.to_str().unwrap_or("").to_lowercase();
+    //         if ext != "bline" {
+    //             eprintln!("Err: Wrong File type");
+    //             exit(1);
+    //         }
+    //     }
+    //     None => {
+    //         eprintln!("Err: Wrong File type");
+    //         exit(1);
+    //     }
+    // }
 
     match fs::read_to_string(filename) {
         Ok(result) => {
             let mut lexer_instance = Lexer::new(&result);
             lexer_instance.scan_source_code();
             let mut parser_instance = Parser::new(lexer_instance.token_list);
-            parser_instance.parse();
+            parser_instance.parse_tokens();
         }
         Err(err) => {
             eprintln!("{err}");

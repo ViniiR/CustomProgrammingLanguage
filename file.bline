@@ -1,1 +1,15 @@
-let bar: Boo = (10 - 20 / (10+ 9)) / 6.7 + 18 * 0 - (-1);
+//let foo: Int = foo(
+//    bar(),
+//   20 / 20 - 9,
+//);
+
+// func definition
+func master(): Nul {
+    let baz: Int = !false == true;
+    mut bar: Arr<Int> ;
+    if --10 {
+        bar = [10, 20];
+    };
+};
+
+func main(): Int {};

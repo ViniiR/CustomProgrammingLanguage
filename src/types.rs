@@ -71,6 +71,7 @@ pub enum TokenTypes {
     For,              // For
     Return,           // Ret
     Break,            // Brk
+    Continue,         // Cnt
     // Use,      // Use Modname From 'mod/path'
     // From,     // From 'mod/path'
     // Switch,   // Switch
@@ -242,6 +243,9 @@ impl fmt::Display for TokenTypes {
             TokenTypes::Break => {
                 write!(f, "Keyword brk")
             }
+            TokenTypes::Continue => {
+                write!(f, "Keyword cnt")
+            }
             TokenTypes::Identifier => {
                 write!(f, "Identifier")
             }
@@ -251,6 +255,9 @@ impl fmt::Display for TokenTypes {
             TokenTypes::StringLiteral => {
                 write!(f, "StringLiteral")
             }
+            // TokenTypes::ArrayLiteral => {
+            //     write!(f, "ArrayLiteral")
+            // }
             TokenTypes::True => {
                 write!(f, "Keyword true")
             }
@@ -292,14 +299,15 @@ pub struct Start {
 
 #[derive(Debug, Clone)]
 pub enum Expression {
+    Identifier(String),
     Binary {
-        left: Box<Expression>,
         operator: TokenTypes,
+        left: Box<Expression>,
         right: Box<Expression>,
     },
     Logical {
-        left: Box<Expression>,
         operator: TokenTypes,
+        left: Box<Expression>,
         right: Box<Expression>,
     },
     Unary {
@@ -310,24 +318,41 @@ pub enum Expression {
         r#type: LiteralTypes,
         // wrong: this should be expression TODO:
         // i have no idea what ^ is talking about but i wont remove it
+        // i forgot what ^ and ^^ are talking about so nvm
         value: String,
     },
+    ArrayLiteral {
+        elements: Option<Box<Vec<Expression>>>,
+    },
+    ArrayAccess(ArrayAccess),
     Call {
         name: String,
-        arguments: Box<Vec<Expression>>,
+        arguments: Option<Box<Vec<Expression>>>,
     },
-    Identifier(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum ArrayAccess {
+    Access {
+        name: String,
+        index: Box<Expression>,
+    },
+    NestedAccess {
+        access: Box<ArrayAccess>,
+        index: Box<Expression>,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum LiteralTypes {
     Numeric,
     String,
-    Array,
+    // Array,
     Boolean,
     Null,
 }
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub enum VariableTypes {
     Int,
     Flo,
@@ -335,6 +360,12 @@ pub enum VariableTypes {
     Nul,
     Boo,
     Arr(Box<VariableTypes>),
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncParam {
+    pub name: String,
+    pub r#type: VariableTypes,
 }
 
 #[derive(Debug)]
@@ -350,14 +381,17 @@ pub enum Statement {
         r#type: Option<VariableTypes>,
         value: Option<Expression>,
     },
-    VariableAlteration {
+    FunctionDeclaration {
         start: Start,
         name: String,
-        value: Expression,
+        r#type: VariableTypes,
+        params: Option<Vec<FuncParam>>,
+        body: Option<Box<Vec<Statement>>>,
     },
     If {
         start: Start,
         condition: Expression,
+        block: Option<Box<Vec<Statement>>>,
     },
     For {
         start: Start,
@@ -368,4 +402,10 @@ pub enum Statement {
         // index_update should be a VariableAlteration
         index_update: Box<Statement>,
     },
+    VariableAlteration {
+        name: String,
+        operator: TokenTypes,
+        value: Expression,
+    },
+    FunctionCall(Expression),
 }
