@@ -5,11 +5,13 @@
 
 // func definition
 func master(): Nul {
-    let baz: Int = !false == true;
-    mut bar: Arr<Int> ;
-    if --10 {
-        bar = [10, 20];
-    };
+    if true {
+        //
+    } elseif true != !!false {
+        //
+    } else {
+        //
+    }
 };
 
 func main(): Int {};

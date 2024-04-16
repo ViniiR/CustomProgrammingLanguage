@@ -392,6 +392,17 @@ pub enum Statement {
         start: Start,
         condition: Expression,
         block: Option<Box<Vec<Statement>>>,
+        alternate: Option<Box<Statement>>,
+    },
+    ElseIf {
+        start: Start,
+        condition: Expression,
+        block: Option<Box<Vec<Statement>>>,
+        alternate: Option<Box<Statement>>,
+    },
+    Else {
+        start: Start,
+        block: Option<Box<Vec<Statement>>>,
     },
     For {
         start: Start,

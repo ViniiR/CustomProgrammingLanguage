@@ -896,16 +896,18 @@ impl Parser {
 
         let expression = self.parse_expr();
 
-        self.peek_expect(&TokenTypes::LeftCurlyBrace);
+        self.expected_or_error(&TokenTypes::LeftCurlyBrace, "{");
         self.advance();
 
+        // curr {
         let block = self.parse_block(is_loop);
+        // curr }
 
         match self.peek_type() {
             TokenTypes::Semicolon => {
                 self.advance();
                 self.advance();
-                return Statement::If {
+                Statement::If {
                     start: Start {
                         line: first.line_number,
                         column: first.column_number,
@@ -915,17 +917,159 @@ impl Parser {
                         Some(b) => Some(Box::new(b)),
                         None => None,
                     },
-                };
+                    alternate: None,
+                }
             }
             TokenTypes::ElseIf => {
-                unimplemented!()
+                self.advance();
+                Statement::If {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    condition: expression,
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                    alternate: Some(Box::new(self.parse_elseif_stmt(is_loop))),
+                }
             }
             TokenTypes::Else => {
-                unimplemented!()
+                self.advance();
+                Statement::If {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    condition: expression,
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                    alternate: Some(Box::new(self.parse_else_stmt(is_loop))),
+                }
             }
             _ => {
                 let peek = self.peek().unwrap().to_owned();
                 self.expected_error("; or elseif or else", &peek);
+                exit(1)
+            }
+        }
+    }
+
+    fn parse_elseif_stmt(&mut self, is_loop: &Loop) -> Statement {
+        let first = self.current().to_owned();
+
+        self.expect_expr_or_error();
+        self.advance();
+
+        let expression = self.parse_expr();
+
+        self.expected_or_error(&TokenTypes::LeftCurlyBrace, "{");
+        self.advance();
+
+        // curr {
+        let block = self.parse_block(is_loop);
+        // curr }
+
+        match self.peek_type() {
+            TokenTypes::Semicolon => {
+                self.advance();
+                self.advance();
+                Statement::ElseIf {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    condition: expression,
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                    alternate: None,
+                }
+            }
+            TokenTypes::ElseIf => {
+                self.advance();
+                Statement::ElseIf {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    condition: expression,
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                    alternate: Some(Box::new(self.parse_elseif_stmt(is_loop))),
+                }
+            }
+            TokenTypes::Else => {
+                self.advance();
+                Statement::ElseIf {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    condition: expression,
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                    alternate: Some(Box::new(self.parse_else_stmt(is_loop))),
+                }
+            }
+            _ => {
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error("; or elseif or else", &peek);
+                exit(1)
+            }
+        }
+    }
+
+    fn parse_else_stmt(&mut self, is_loop: &Loop) -> Statement {
+        let first = self.current().to_owned();
+
+        self.expected_or_error(&TokenTypes::LeftCurlyBrace, "{");
+        self.advance();
+
+        let block = self.parse_block(is_loop);
+
+        match self.peek_type() {
+            TokenTypes::Semicolon => {
+                self.advance();
+                self.advance();
+                Statement::Else {
+                    start: Start {
+                        line: first.line_number,
+                        column: first.column_number,
+                    },
+                    block: match block {
+                        Some(b) => Some(Box::new(b)),
+                        None => None,
+                    },
+                }
+            }
+            TokenTypes::If => {
+                report(
+                    self.current().line_number,
+                    self.current().column_number,
+                    String::from("If statements cannot go after else"),
+                );
+                exit(1)
+            }
+            TokenTypes::ElseIf => {
+                report(
+                    self.current().line_number,
+                    self.current().column_number,
+                    String::from("ElseIf statements cannot go after else"),
+                );
+                exit(1)
+            }
+            _ => {
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error(";", &peek);
                 exit(1)
             }
         }
