@@ -4,12 +4,10 @@
 //);
 
 // func definition
-func master(): Nul {
-    if true {
-
-    } else {
-
+func main(): Nul {
+    for ;;; {
+        ret
+        null;
     };
 };
 
-func main(): Int {};

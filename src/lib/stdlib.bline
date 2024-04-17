@@ -1,0 +1,3 @@
+func print(params: Arr<Str>): Nul {
+
+};

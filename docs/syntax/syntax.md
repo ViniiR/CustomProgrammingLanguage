@@ -49,7 +49,7 @@ let foo: Nul = null;
 
 Functions can be defined in 1 way
 ```
-func master(argc: Int, argv: Arr<Str>): Nul {
+func main(argc: Int, argv: Arr<Str>): Nul {
     ret param * 2;
 };
 ```

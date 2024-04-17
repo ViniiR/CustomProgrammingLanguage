@@ -1,9 +1,10 @@
 use crate::{
-    error, report,
-    types::{
+    error,
+    frontend::types::{
         ArrayAccess, Expression, FuncParam, LiteralTypes, Start, Statement, Token, TokenTypes,
         VarDeclarationKind, VariableTypes,
     },
+    report,
 };
 use std::{iter::Peekable, process::exit};
 
@@ -11,7 +12,7 @@ use std::{iter::Peekable, process::exit};
 pub struct Parser {
     tokens: Peekable<std::vec::IntoIter<Token>>,
     current_token: Token,
-    abstract_syntax_tree: Statement,
+    pub abstract_syntax_tree: Statement,
 }
 
 #[derive(Debug)]
@@ -79,69 +80,177 @@ impl Parser {
         }
     }
 
-    fn mutate_var_declaration(&mut self, var_dec: &mut Statement, option: VarDecMutateOptions) {
-        match var_dec {
-            Statement::VariableDeclaration { name, value, .. } => match option {
-                VarDecMutateOptions::Name => *name = Some(self.current().token_value.to_owned()),
-                VarDecMutateOptions::Value(val) => *value = Some(val),
-            },
-            _ => exit(1),
-        }
-    }
-
-    /// peeks next token and exits if its not a valid expr
-    fn expect_expr_or_error(&mut self) {
-        match self.peek_type() {
-            TokenTypes::Identifier
-            | TokenTypes::NumberLiteral
-            | TokenTypes::StringLiteral
-            | TokenTypes::BinaryPlus
-            | TokenTypes::BinaryMinus
-            | TokenTypes::LogicalNot
-            | TokenTypes::True
-            | TokenTypes::False
-            | TokenTypes::Null
-            | TokenTypes::LeftSquareBracket
-            | TokenTypes::LeftParenthesis => {}
-            TokenTypes::EOF => {
-                let current = self.current().to_owned();
-                if self.is_binary_operator(&current.token_type) {
-                    let peek = self.peek().unwrap().to_owned();
-                    self.expected_error("Expression", &peek);
+    pub fn parse_tokens(&mut self) {
+        while !self.current_type().eq(&TokenTypes::EOF) {
+            let ast_node = match &self.current_type() {
+                TokenTypes::Function => self.parse_function_statement(),
+                TokenTypes::Semicolon => {
+                    self.unexpected_token_error(self.current());
+                    exit(1)
                 }
-                let peek = self.peek().unwrap().to_owned();
-                self.expected_error(";", &peek);
-            }
-            _ => {
-                let peek = self.peek().unwrap().to_owned();
-                self.expected_error("Expression", &peek);
-            }
+                TokenTypes::Comment => {
+                    self.advance();
+                    continue;
+                }
+                TokenTypes::ConstantVariable | TokenTypes::MutableVariable => {
+                    self.custom_error_current("Variables cannot be defined outside of a function");
+                    exit(1)
+                }
+                TokenTypes::If => {
+                    self.custom_error_current(
+                        "If statements cannot be defined outside of a function",
+                    );
+                    exit(1)
+                }
+                TokenTypes::ElseIf => {
+                    self.custom_error_current(
+                        "ElseIf statements cannot be defined outside of a function",
+                    );
+                    exit(1)
+                }
+                TokenTypes::Else => {
+                    self.custom_error_current(
+                        "Else statements cannot be defined outside of a function",
+                    );
+                    exit(1)
+                }
+                TokenTypes::While | TokenTypes::For => {
+                    self.custom_error_current("Loops cannot be defined outside of a function");
+                    exit(1)
+                }
+                TokenTypes::Return => {
+                    self.custom_error_current(
+                        "Return statements cannot be used outside of a function",
+                    );
+                    exit(1)
+                }
+                TokenTypes::Continue | TokenTypes::Break => {
+                    self.custom_error_current("Loop controls cannot be used outside of a loop");
+                    exit(1)
+                }
+                _ => {
+                    if self.is_expr() {
+                        self.custom_error_current("Expressions cannot be standalone statements");
+                        exit(1)
+                    }
+                    self.custom_error_current("Only functions can be defined at the global scope");
+                    exit(1)
+                }
+            };
+            self.push_statement(ast_node);
+            self.advance();
         }
     }
 
-    /// peeks next token and exit if its not of given type
-    fn expected_or_error(&mut self, expected: &TokenTypes, expected_name: &str) {
-        if !self.peek_expect(expected) {
-            let def = self.current().to_owned();
-            let peek = self.peek().unwrap_or_else(|| &def).to_owned();
-            self.expected_error(expected_name, &peek);
+    /// parse { ... }
+    fn parse_block(&mut self, is_loop: &Loop) -> Option<Vec<Statement>> {
+        // current {
+        self.advance();
+        // inside block
+        let mut block_stmts: Vec<Statement> = Vec::new();
+
+        let mut stmt: Statement;
+
+        while !self.current_type().eq(&TokenTypes::EOF) {
+            if self.current_type().eq(&TokenTypes::RightCurlyBrace) {
+                break;
+            }
+
+            stmt = match self.current_type() {
+                TokenTypes::ConstantVariable | TokenTypes::MutableVariable => {
+                    let dec = self.parse_var_declaration();
+                    self.advance();
+                    dec
+                }
+                TokenTypes::Identifier => {
+                    let peek = self.peek().unwrap().to_owned();
+                    if self.peek_expect(&TokenTypes::LeftParenthesis) {
+                        let stmt = self.parse_call_statement();
+                        self.advance();
+                        stmt
+                    } else if self.is_assign_operator(&peek.token_type) {
+                        self.parse_var_mutation()
+                    } else {
+                        self.unexpected_token_error(&self.current());
+                        exit(1)
+                    }
+                }
+                TokenTypes::Function => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Functions cannot be defined inside functions"),
+                    );
+                    exit(1)
+                }
+                TokenTypes::Continue | TokenTypes::Break => match is_loop {
+                    Loop::Yes => self.parse_loop_controls(),
+                    _ => {
+                        report(
+                            self.current().line_number,
+                            self.current().column_number,
+                            String::from("Loop controls cannot be used outside of loops"),
+                        );
+                        exit(1)
+                    }
+                },
+                TokenTypes::Return => self.parse_func_return(),
+                TokenTypes::If => self.parse_if_stmt(is_loop),
+                TokenTypes::ElseIf => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Standalone elseif statement"),
+                    );
+                    exit(1)
+                }
+                TokenTypes::Else => {
+                    report(
+                        self.current().line_number,
+                        self.current().column_number,
+                        String::from("Standalone else statement"),
+                    );
+                    exit(1)
+                }
+                TokenTypes::While => self.parse_while_loop(&Loop::Yes),
+                TokenTypes::For => self.parse_for_loop(&Loop::Yes),
+                TokenTypes::Semicolon => {
+                    self.unexpected_token_error(self.current());
+                    exit(1)
+                }
+                TokenTypes::Comment => {
+                    self.advance();
+                    continue;
+                }
+                _ => {
+                    if self.is_expr() {
+                        self.custom_error_current(
+                            "Only function calls can be standalone statements",
+                        );
+                        exit(1)
+                    }
+                    self.unknown_error(&self.current_token);
+                    exit(1)
+                }
+            };
+
+            block_stmts.push(stmt);
+        }
+        // current }
+
+        if !self.current_type().eq(&TokenTypes::RightCurlyBrace) {
+            report(
+                self.current().line_number,
+                self.current().column_number,
+                String::from("Unclosed block"),
+            );
             exit(1)
         }
-    }
 
-    fn mutate_or_error(
-        &mut self,
-        expected: &str,
-        expected_type: &TokenTypes,
-        var_dec: &mut Statement,
-        option: VarDecMutateOptions,
-    ) {
-        if self.peek_expect(expected_type) {
-            self.advance();
-            self.mutate_var_declaration(var_dec, option);
+        if block_stmts.len() == 0 {
+            None
         } else {
-            self.advance();
-            self.expected_error(expected, &self.current());
+            Some(block_stmts)
         }
     }
 
@@ -642,7 +751,6 @@ impl Parser {
                 self.advance();
                 self.advance();
                 let r#type = self.get_generic_type();
-                dbg!(self.current());
                 self.expected_or_error(&TokenTypes::LogicalGreaterThan, ">");
                 self.advance();
                 VariableTypes::Arr(Box::new(r#type))
@@ -1088,6 +1196,24 @@ impl Parser {
         }
     }
 
+    /// if self.current if valid expr return true
+    fn is_expr(&mut self) -> bool {
+        match self.current_type() {
+            TokenTypes::Identifier
+            | TokenTypes::NumberLiteral
+            | TokenTypes::StringLiteral
+            | TokenTypes::BinaryPlus
+            | TokenTypes::BinaryMinus
+            | TokenTypes::LogicalNot
+            | TokenTypes::True
+            | TokenTypes::False
+            | TokenTypes::Null
+            | TokenTypes::LeftSquareBracket
+            | TokenTypes::LeftParenthesis => true,
+            _ => false,
+        }
+    }
+
     /// if self.peek is valid expr return true
     fn peek_is_expr(&mut self) -> bool {
         match self.peek_type() {
@@ -1166,7 +1292,6 @@ impl Parser {
         }
         // curr ;
 
-        dbg!(self.current());
         let test: Option<Expression>;
 
         if self.peek_is_expr() {
@@ -1181,7 +1306,6 @@ impl Parser {
         self.advance();
         // curr test; >i += 1<;
 
-        dbg!(self.current());
         let variable_update: Option<Statement>;
 
         if self.peek_type().eq(&TokenTypes::Identifier) {
@@ -1230,7 +1354,6 @@ impl Parser {
     }
 
     fn parse_loop_controls(&mut self) -> Statement {
-        dbg!(self.current());
         match self.peek_type() {
             TokenTypes::Semicolon => {}
             _ => {
@@ -1269,139 +1392,70 @@ impl Parser {
         }
     }
 
-    /// parse { ... }
-    fn parse_block(&mut self, is_loop: &Loop) -> Option<Vec<Statement>> {
-        // current {
-        self.advance();
-        // inside block
-        let mut block_stmts: Vec<Statement> = Vec::new();
-
-        let mut stmt: Statement;
-
-        while !self.current_type().eq(&TokenTypes::EOF) {
-            if self.current_type().eq(&TokenTypes::RightCurlyBrace) {
-                break;
-            }
-
-            stmt = match self.current_type() {
-                TokenTypes::ConstantVariable | TokenTypes::MutableVariable => {
-                    let dec = self.parse_var_declaration();
-                    self.advance();
-                    dec
-                }
-                TokenTypes::Identifier => {
-                    let peek = self.peek().unwrap().to_owned();
-                    if self.peek_expect(&TokenTypes::LeftParenthesis) {
-                        self.parse_call_statement()
-                    } else if self.is_assign_operator(&peek.token_type) {
-                        self.parse_var_mutation()
-                    } else {
-                        self.unexpected_token_error(&self.current());
-                        exit(1)
-                    }
-                }
-                TokenTypes::Function => {
-                    report(
-                        self.current().line_number,
-                        self.current().column_number,
-                        String::from("Functions cannot be defined inside functions"),
-                    );
-                    exit(1)
-                }
-                TokenTypes::Continue | TokenTypes::Break => match is_loop {
-                    Loop::Yes => self.parse_loop_controls(),
-                    _ => {
-                        report(
-                            self.current().line_number,
-                            self.current().column_number,
-                            String::from("Loop controls cannot be used outside of loops"),
-                        );
-                        exit(1)
-                    }
-                },
-                TokenTypes::Return => self.parse_func_return(),
-                TokenTypes::If => self.parse_if_stmt(is_loop),
-                TokenTypes::ElseIf => {
-                    report(
-                        self.current().line_number,
-                        self.current().column_number,
-                        String::from("Standalone elseif statement"),
-                    );
-                    exit(1)
-                }
-                TokenTypes::Else => {
-                    report(
-                        self.current().line_number,
-                        self.current().column_number,
-                        String::from("Standalone else statement"),
-                    );
-                    exit(1)
-                }
-                TokenTypes::While => self.parse_while_loop(&Loop::Yes),
-                TokenTypes::For => self.parse_for_loop(&Loop::Yes),
-                TokenTypes::Semicolon => {
-                    self.unexpected_token_error(self.current());
-                    exit(1)
-                }
-                TokenTypes::Comment => {
-                    self.advance();
-                    continue;
-                }
-                _ => {
-                    self.unknown_error(&self.current_token);
-                    exit(1)
-                }
-            };
-
-            block_stmts.push(stmt);
-        }
-        // current }
-
-        if !self.current_type().eq(&TokenTypes::RightCurlyBrace) {
-            report(
-                self.current().line_number,
-                self.current().column_number,
-                String::from("Unclosed block"),
-            );
-            exit(1)
-        }
-
-        if block_stmts.len() == 0 {
-            None
-        } else {
-            Some(block_stmts)
+    fn mutate_var_declaration(&mut self, var_dec: &mut Statement, option: VarDecMutateOptions) {
+        match var_dec {
+            Statement::VariableDeclaration { name, value, .. } => match option {
+                VarDecMutateOptions::Name => *name = Some(self.current().token_value.to_owned()),
+                VarDecMutateOptions::Value(val) => *value = Some(val),
+            },
+            _ => exit(1),
         }
     }
 
-    pub fn parse_tokens(&mut self) {
-        while !self.current_type().eq(&TokenTypes::EOF) {
-            let ast_node = match &self.current_type() {
-                TokenTypes::Function => self.parse_function_statement(),
-                TokenTypes::Semicolon => {
-                    self.unexpected_token_error(self.current());
-                    exit(1)
+    /// peeks next token and exits if its not a valid expr
+    fn expect_expr_or_error(&mut self) {
+        match self.peek_type() {
+            TokenTypes::Identifier
+            | TokenTypes::NumberLiteral
+            | TokenTypes::StringLiteral
+            | TokenTypes::BinaryPlus
+            | TokenTypes::BinaryMinus
+            | TokenTypes::LogicalNot
+            | TokenTypes::True
+            | TokenTypes::False
+            | TokenTypes::Null
+            | TokenTypes::LeftSquareBracket
+            | TokenTypes::LeftParenthesis => {}
+            TokenTypes::EOF => {
+                let current = self.current().to_owned();
+                if self.is_binary_operator(&current.token_type) {
+                    let peek = self.peek().unwrap().to_owned();
+                    self.expected_error("Expression", &peek);
                 }
-                TokenTypes::Comment => {
-                    self.advance();
-                    continue;
-                }
-                _ => {
-                    report(
-                        self.current().line_number,
-                        self.current().column_number,
-                        format!(
-                            "Only functions can be defined outside of a block, remove this '{}'",
-                            self.current().token_type
-                        ),
-                    );
-                    // self.unknown_error(&self.current_token);
-                    exit(1)
-                }
-            };
-            self.push_statement(ast_node);
-            self.advance();
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error(";", &peek);
+            }
+            _ => {
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error("Expression", &peek);
+            }
         }
-        dbg!(&self.abstract_syntax_tree);
+    }
+
+    /// peeks next token and exit if its not of given type
+    fn expected_or_error(&mut self, expected: &TokenTypes, expected_name: &str) {
+        if !self.peek_expect(expected) {
+            let def = self.current().to_owned();
+            let peek = self.peek().unwrap_or_else(|| &def).to_owned();
+            self.expected_error(expected_name, &peek);
+            exit(1)
+        }
+    }
+
+    fn mutate_or_error(
+        &mut self,
+        expected: &str,
+        expected_type: &TokenTypes,
+        var_dec: &mut Statement,
+        option: VarDecMutateOptions,
+    ) {
+        if self.peek_expect(expected_type) {
+            self.advance();
+            self.mutate_var_declaration(var_dec, option);
+        } else {
+            self.advance();
+            self.expected_error(expected, &self.current());
+        }
     }
 
     fn is_assign_operator(&self, operator: &TokenTypes) -> bool {
@@ -1414,6 +1468,16 @@ impl Parser {
             | TokenTypes::AssignRest => true,
             _ => false,
         }
+    }
+
+    /// eprints a custom error related to self.current_token
+    /// does not exit program
+    fn custom_error_current(&self, msg: &str) {
+        report(
+            self.current().line_number,
+            self.current().column_number,
+            format!("{msg}, remove this '{}'", self.current().token_type),
+        );
     }
 
     fn unexpected_token_error(&self, token: &Token) {

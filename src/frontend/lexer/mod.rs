@@ -1,7 +1,5 @@
-use crate::{
-    error,
-    types::{Token, TokenTypes as TType},
-};
+use crate::error;
+use crate::frontend::types::{Token, TokenTypes as TType};
 use std::process::exit;
 
 #[derive(Debug)]

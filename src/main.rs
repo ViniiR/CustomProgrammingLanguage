@@ -1,29 +1,23 @@
-mod lexer;
-mod parser;
-mod types;
+mod frontend;
 
 use std::io::Write;
-use std::{
-    env, fs,
-    io::{stdin, stdout},
-    process::exit,
-};
+use std::{env, fs, io::stdout, process::exit};
 
-use lexer::Lexer;
-use parser::Parser;
+use crate::frontend::lexer::Lexer;
+use crate::frontend::parser::Parser;
 
-fn repl() {
-    print!("Welcome to bline's repl, type '\\leave' to exit\n");
-    loop {
-        print!("=> ");
-        stdout().flush().expect("Failed to flush std output");
-        let mut input = String::new();
-        stdin().read_line(&mut input).expect("error");
-        if input.trim() == "\\leave" {
-            exit(0)
-        }
-    }
-}
+// fn repl() {
+//     print!("Welcome to bline's repl, type '\\leave' to exit\n");
+//     loop {
+//         print!("=> ");
+//         stdout().flush().expect("Failed to flush std output");
+//         let mut input = String::new();
+//         stdin().read_line(&mut input).expect("error");
+//         if input.trim() == "\\leave" {
+//             exit(0)
+//         }
+//     }
+// }
 
 pub fn error(line: u32, column: u32, message: String) {
     report(line, column, message);
@@ -36,9 +30,9 @@ fn report(line: u32, column: u32, message: String) {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        repl();
-    }
+    // if args.len() < 2 {
+    //     repl();
+    // }
 
     if args[1] == "--help" || args[1] == "-h" {
         println!(
@@ -70,6 +64,7 @@ fn main() {
             lexer_instance.scan_source_code();
             let mut parser_instance = Parser::new(lexer_instance.token_list);
             parser_instance.parse_tokens();
+            dbg!(parser_instance.abstract_syntax_tree);
         }
         Err(err) => {
             eprintln!("{err}");
