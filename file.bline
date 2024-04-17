@@ -6,12 +6,10 @@
 // func definition
 func master(): Nul {
     if true {
-        //
-    } elseif true != !!false {
-        //
+
     } else {
-        //
-    }
+
+    };
 };
 
 func main(): Int {};

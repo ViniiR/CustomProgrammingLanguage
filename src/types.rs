@@ -404,14 +404,27 @@ pub enum Statement {
         start: Start,
         block: Option<Box<Vec<Statement>>>,
     },
+    While {
+        start: Start,
+        test: Expression,
+        block: Option<Box<Vec<Statement>>>,
+    },
     For {
         start: Start,
-        // index should ALWAYS be a VariableDeclaration
-        index: Box<Statement>,
-        // test should be a logical expression
-        test: Expression,
-        // index_update should be a VariableAlteration
-        index_update: Box<Statement>,
+        variable: Option<Box<Statement>>,
+        test: Option<Expression>,
+        variable_update: Option<Box<Statement>>,
+        block: Option<Box<Vec<Statement>>>,
+    },
+    Break {
+        start: Start,
+    },
+    Continue {
+        start: Start,
+    },
+    Return {
+        start: Start,
+        expression: Option<Expression>,
     },
     VariableAlteration {
         name: String,

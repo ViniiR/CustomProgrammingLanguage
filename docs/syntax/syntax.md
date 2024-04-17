@@ -5,6 +5,7 @@ let creates a constant variable and mut a mutable one
 ```
 let foo: Int = 10;
 mut foo: Int = 10;
+mut foo: Int;
 ```
 to mutate a variable
 ```
@@ -48,14 +49,15 @@ let foo: Nul = null;
 
 Functions can be defined in 1 way
 ```
-func foo(param: Int): Int {
+func master(argc: Int, argv: Arr<Str>): Nul {
     ret param * 2;
-}
+};
 ```
 
-Functions can be called in 1 way
+Functions can be called in 2 way
 ```
 foo(10);
+let bar: Int = foo();
 ```
 
 While loops can be defined in 1 way
@@ -63,8 +65,8 @@ While loops can be defined in 1 way
 while !false {
     if true {
         brk;
-    }
-}
+    };
+};
 ```
 
 For loops can be defined in 1 way
@@ -72,11 +74,11 @@ For loops can be defined in 1 way
 for let i = 0; i < 10; i += 1; {
     if true {
         brk;
-    }
-}
+    };
+};
 ```
 
-If statements can be defined in 3 ways
+If statements can be defined in 3 ways either with or without elseif or else
 ```
 if true & false {
     //
@@ -84,13 +86,14 @@ if true & false {
     //
 } else {
     //
-}
+};
 ```
 
 Here are all reserved keywords:
 ```
 func
 brk
+cnt
 ret
 let
 if

@@ -100,6 +100,7 @@ impl Parser {
             | TokenTypes::LogicalNot
             | TokenTypes::True
             | TokenTypes::False
+            | TokenTypes::Null
             | TokenTypes::LeftSquareBracket
             | TokenTypes::LeftParenthesis => {}
             TokenTypes::EOF => {
@@ -548,25 +549,6 @@ impl Parser {
             },
             TokenTypes::LeftParenthesis => self.parse_parentheses(),
             TokenTypes::LeftSquareBracket => self.parse_square_brackets(),
-            // TokenTypes::BinaryPlus => {
-            //     self.advance();
-            //     self.parse_expr()
-            // }
-            // TokenTypes::BinaryMinus => {
-            //     self.advance();
-            //
-            //     Expression::Unary {
-            //         operator: token.token_type,
-            //         operand: Box::new(self.parse_expr()),
-            //     }
-            // }
-            // TokenTypes::LogicalNot => {
-            //     self.advance();
-            //     Expression::Unary {
-            //         operator: TokenTypes::LogicalNot,
-            //         operand: Box::new(self.parse_expr()),
-            //     }
-            // }
             TokenTypes::Null => Expression::Literal {
                 r#type: LiteralTypes::Null,
                 value: self.current().token_value.to_owned(),
@@ -1075,8 +1057,216 @@ impl Parser {
         }
     }
 
+    fn parse_while_loop(&mut self, is_loop: &Loop) -> Statement {
+        let initial = self.current().to_owned();
+
+        self.expect_expr_or_error();
+        self.advance();
+
+        let test = self.parse_expr();
+
+        self.expected_or_error(&TokenTypes::LeftCurlyBrace, "{");
+        self.advance();
+
+        let block = self.parse_block(is_loop);
+        // curr }
+
+        self.expected_or_error(&TokenTypes::Semicolon, ";");
+        self.advance();
+        self.advance();
+
+        Statement::While {
+            start: Start {
+                line: initial.line_number,
+                column: initial.column_number,
+            },
+            test,
+            block: match block {
+                Some(b) => Some(Box::new(b)),
+                None => None,
+            },
+        }
+    }
+
+    /// if self.peek is valid expr return true
+    fn peek_is_expr(&mut self) -> bool {
+        match self.peek_type() {
+            TokenTypes::Identifier
+            | TokenTypes::NumberLiteral
+            | TokenTypes::StringLiteral
+            | TokenTypes::BinaryPlus
+            | TokenTypes::BinaryMinus
+            | TokenTypes::LogicalNot
+            | TokenTypes::True
+            | TokenTypes::False
+            | TokenTypes::Null
+            | TokenTypes::LeftSquareBracket
+            | TokenTypes::LeftParenthesis => true,
+            _ => false,
+        }
+    }
+
+    fn parse_func_return(&mut self) -> Statement {
+        let start = self.current().to_owned();
+        if self.peek_is_expr() {
+            self.advance();
+            let expr = self.parse_expr();
+            self.expected_or_error(&TokenTypes::Semicolon, ";");
+            self.advance();
+            self.advance();
+            Statement::Return {
+                start: Start {
+                    line: start.line_number,
+                    column: start.column_number,
+                },
+                expression: Some(expr),
+            }
+        } else if self.peek_expect(&TokenTypes::Semicolon) {
+            self.advance();
+            self.advance();
+            Statement::Return {
+                start: Start {
+                    line: start.line_number,
+                    column: start.column_number,
+                },
+                expression: None,
+            }
+        } else {
+            let peek = self.peek().unwrap().to_owned();
+            self.expected_error("Expression or ;", &peek);
+            exit(1)
+        }
+    }
+
+    fn parse_for_loop(&mut self, is_loop: &Loop) -> Statement {
+        let start = Start {
+            line: self.current().line_number,
+            column: self.current().column_number,
+        };
+
+        if self.peek_expect(&TokenTypes::ConstantVariable) {
+            report(
+                self.current().line_number,
+                self.current().column_number,
+                String::from("Immutable variables cannot be used inside a loop variablechange 'let' to 'mut'")
+            );
+            exit(1);
+        }
+        self.advance();
+
+        let variable: Option<Statement>;
+        if self.current_type().eq(&TokenTypes::MutableVariable) {
+            variable = Some(self.parse_var_declaration());
+        } else if self.current_type().eq(&TokenTypes::Semicolon) {
+            self.advance();
+            variable = None;
+        } else {
+            self.unexpected_token_error(self.current());
+            exit(1)
+        }
+        // curr ;
+
+        dbg!(self.current());
+        let test: Option<Expression>;
+
+        if self.peek_is_expr() {
+            self.advance();
+            test = Some(self.parse_expr());
+        } else if self.current_type().eq(&TokenTypes::Semicolon) {
+            test = None;
+        } else {
+            self.unexpected_token_error(self.current());
+            exit(1)
+        }
+        self.advance();
+        // curr test; >i += 1<;
+
+        dbg!(self.current());
+        let variable_update: Option<Statement>;
+
+        if self.peek_type().eq(&TokenTypes::Identifier) {
+            self.advance();
+            variable_update = Some(self.parse_var_mutation());
+        } else if self.current_type().eq(&TokenTypes::Semicolon) {
+            self.advance();
+            if self.current_type().eq(&TokenTypes::Semicolon) {
+                self.advance();
+            }
+            variable_update = None;
+        } else {
+            self.unexpected_token_error(self.current());
+            exit(1)
+        }
+
+        if !self.current_type().eq(&TokenTypes::LeftCurlyBrace) {
+            self.expected_error("{", self.current());
+            exit(1)
+        }
+
+        let block = self.parse_block(is_loop);
+        self.expected_or_error(&TokenTypes::Semicolon, ";");
+        self.advance();
+        self.advance();
+
+        Statement::For {
+            start,
+            variable: match variable {
+                Some(v) => Some(Box::new(v)),
+                None => None,
+            },
+            test: match test {
+                Some(v) => Some(v),
+                None => None,
+            },
+            variable_update: match variable_update {
+                Some(v) => Some(Box::new(v)),
+                None => None,
+            },
+            block: match block {
+                Some(b) => Some(Box::new(b)),
+                None => None,
+            },
+        }
+    }
+
     fn parse_loop_controls(&mut self) -> Statement {
-        unimplemented!()
+        dbg!(self.current());
+        match self.peek_type() {
+            TokenTypes::Semicolon => {}
+            _ => {
+                let peek = self.peek().unwrap().to_owned();
+                self.expected_error(";", &peek);
+                exit(1)
+            }
+        }
+        match self.current_type() {
+            TokenTypes::Break => {
+                let stmt = Statement::Break {
+                    start: Start {
+                        line: self.current().line_number,
+                        column: self.current().column_number,
+                    },
+                };
+                self.advance();
+                self.advance();
+                stmt
+            }
+            TokenTypes::Continue => {
+                let stmt = Statement::Continue {
+                    start: Start {
+                        line: self.current().line_number,
+                        column: self.current().column_number,
+                    },
+                };
+                self.advance();
+                self.advance();
+                stmt
+            }
+            _ => {
+                self.expected_error("brk or cnt", self.current());
+                exit(1)
+            }
+        }
     }
 
     /// parse { ... }
@@ -1129,12 +1319,13 @@ impl Parser {
                         exit(1)
                     }
                 },
+                TokenTypes::Return => self.parse_func_return(),
                 TokenTypes::If => self.parse_if_stmt(is_loop),
                 TokenTypes::ElseIf => {
                     report(
                         self.current().line_number,
                         self.current().column_number,
-                        String::from("Dangling elseif statement"),
+                        String::from("Standalone elseif statement"),
                     );
                     exit(1)
                 }
@@ -1142,10 +1333,12 @@ impl Parser {
                     report(
                         self.current().line_number,
                         self.current().column_number,
-                        String::from("Dangling else statement"),
+                        String::from("Standalone else statement"),
                     );
                     exit(1)
                 }
+                TokenTypes::While => self.parse_while_loop(&Loop::Yes),
+                TokenTypes::For => self.parse_for_loop(&Loop::Yes),
                 TokenTypes::Semicolon => {
                     self.unexpected_token_error(self.current());
                     exit(1)
@@ -1183,20 +1376,6 @@ impl Parser {
     pub fn parse_tokens(&mut self) {
         while !self.current_type().eq(&TokenTypes::EOF) {
             let ast_node = match &self.current_type() {
-                // TokenTypes::ConstantVariable | TokenTypes::MutableVariable => {
-                //     self.parse_var_declaration()
-                // }
-                // TokenTypes::Identifier => {
-                //     let peek = self.peek().unwrap().to_owned();
-                //     if self.peek_expect(&TokenTypes::LeftParenthesis) {
-                //         self.parse_call_statement()
-                //     } else if self.is_assign_operator(&peek.token_type) {
-                //         self.parse_var_mutation()
-                //     } else {
-                //         self.unexpected_token_error(&self.current());
-                //         exit(1)
-                //     }
-                // }
                 TokenTypes::Function => self.parse_function_statement(),
                 TokenTypes::Semicolon => {
                     self.unexpected_token_error(self.current());
@@ -1210,7 +1389,10 @@ impl Parser {
                     report(
                         self.current().line_number,
                         self.current().column_number,
-                        String::from("Only functions can be defined outside of a block"),
+                        format!(
+                            "Only functions can be defined outside of a block, remove this '{}'",
+                            self.current().token_type
+                        ),
                     );
                     // self.unknown_error(&self.current_token);
                     exit(1)
