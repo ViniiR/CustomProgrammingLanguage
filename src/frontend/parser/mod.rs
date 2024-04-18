@@ -679,7 +679,7 @@ impl Parser {
             TokenTypes::Int => VariableTypes::Int,
             TokenTypes::Str => VariableTypes::Str,
             TokenTypes::Boo => VariableTypes::Boo,
-            TokenTypes::Nul => VariableTypes::Nul,
+            TokenTypes::Null => VariableTypes::Nul,
             TokenTypes::Flo => VariableTypes::Flo,
             TokenTypes::Arr => {
                 if !self.peek_expect(&TokenTypes::LogicalSmallerThan) {
@@ -711,7 +711,7 @@ impl Parser {
             TokenTypes::Int => VariableTypes::Int,
             TokenTypes::Str => VariableTypes::Str,
             TokenTypes::Boo => VariableTypes::Boo,
-            TokenTypes::Nul => VariableTypes::Nul,
+            TokenTypes::Null => VariableTypes::Nul,
             TokenTypes::Flo => VariableTypes::Flo,
             TokenTypes::Arr => {
                 if !self.peek_expect(&TokenTypes::LogicalSmallerThan) {
@@ -744,7 +744,7 @@ impl Parser {
             TokenTypes::Int => VariableTypes::Int,
             TokenTypes::Str => VariableTypes::Str,
             TokenTypes::Boo => VariableTypes::Boo,
-            TokenTypes::Nul => VariableTypes::Nul,
+            TokenTypes::Null => VariableTypes::Nul,
             TokenTypes::Flo => VariableTypes::Flo,
             TokenTypes::Arr => {
                 self.expected_or_error(&TokenTypes::LogicalSmallerThan, "<");
@@ -756,6 +756,7 @@ impl Parser {
                 VariableTypes::Arr(Box::new(r#type))
             }
             _ => {
+                dbg!(self.current());
                 self.expected_error("Type", self.current());
                 exit(1)
             }
@@ -780,7 +781,7 @@ impl Parser {
                     self.advance();
                     *r#type = Some(VariableTypes::Boo);
                 }
-                TokenTypes::Nul => {
+                TokenTypes::Null => {
                     self.advance();
                     self.advance();
                     *r#type = Some(VariableTypes::Nul);

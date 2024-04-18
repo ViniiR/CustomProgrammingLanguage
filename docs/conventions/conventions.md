@@ -1,4 +1,4 @@
-#Recommended conventions for bline
+# Recommended conventions for bline
 
 Indentation
 ```
@@ -14,21 +14,21 @@ Spaces between expressions
 ```
 wrong:
 
-let foo:Int=10;
+let foo:i32=10;
 if true!=false{
   //
-}
-func bar ():Int{
+};
+func bar ():i32{
 ret ( 10 + 10 );
-}
+};
 
 correct:
 
-let foo: Int = 10;
+let foo: i32 = 10;
 if true != false {
     //
-}
-func bar(): Int {
+};
+func bar(): i32 {
     ret (10 + 10);
-}
+};
 ```

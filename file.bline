@@ -1,13 +1,11 @@
-//let foo: Int = foo(
+//let foo: i32 = foo(
 //    bar(),
 //   20 / 20 - 9,
 //);
 
 // func definition
-func main(): Nul {
-    for ;;; {
-        ret
-        null;
-    };
+func main(): null {
+    let foo: vec<f64> = null;
 };
 
+// i32 f64 bool str vec null

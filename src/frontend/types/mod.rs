@@ -55,7 +55,7 @@ pub enum TokenTypes {
     // Obj, // { Property = "value" }
     Arr, // [0,1,2]
     Boo, // True | False
-    Nul, // Null
+    // Nul, // Null
 
     // Special
     Comment, // //
@@ -207,9 +207,9 @@ impl fmt::Display for TokenTypes {
             TokenTypes::Boo => {
                 write!(f, "Keyword Boo")
             }
-            TokenTypes::Nul => {
-                write!(f, "Keyword Nul")
-            }
+            // TokenTypes::Nul => {
+            //     write!(f, "Keyword Nul")
+            // }
             TokenTypes::Comment => {
                 write!(f, "Comment")
             }

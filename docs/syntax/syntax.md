@@ -1,63 +1,65 @@
-#Welcome to bline's syntax explained
+# Welcome to bline's syntax explained
 
-Variables can be defined in 2 ways
+in bline all statements must end if a semicolon
+
+Variables can be defined in 3 ways
 let creates a constant variable and mut a mutable one
 ```
-let foo: Int = 10;
-mut foo: Int = 10;
-mut foo: Int;
+let foo: i32 = 10;
+mut foo: i32 = 10;
+mut foo: i32;
 ```
 to mutate a variable
 ```
 foo = 20;
 ```
 
-Ints can be defined in 2 ways
+i32s can be defined in 2 ways
 ```
-let foo: Int = 10;
-let foo: Int = 100_000;
-```
-
-Flos can be defined in 2 ways
-```
-let foo: Flo = 1.0;
-let foo: Int = .1;
+let foo: i32 = 10;
+let foo: i32 = 100_000;
 ```
 
-Strs can be defined in 2 ways
+f64s can be defined in 2 ways
 ```
-let foo: Str = "Hello, world!";
-let foo: Str = 'Hello, world!';
-```
-
-Boos can be defined in 2 ways
-```
-let spooky: Boo = true;
-let spooky: Boo = false;
+let foo: f64 = 1.0;
+let foo: i32 = .1;
 ```
 
-Arrs can be defined in 1 way and you must specify its type
+strs can be defined in 2 ways
 ```
-let foo: Arr<Int> = [1, 2, 3];
-let foo: Arr<Str> = ["Hello", "world", "!"];
+let foo: str = "Hello, world!";
+let foo: str = 'Hello, world!';
 ```
 
-Nuls can only be defined in 1 way
+bools can be defined in 2 ways
 ```
-let foo: Nul = null;
+let spooky: bool = true;
+let spooky: bool = false;
+```
+
+vecs can be defined in 1 way and you must specify its type
+```
+let foo: vec<i32> = [1, 2, 3];
+let foo: vec<str> = ["Hello", "world", "!"];
+```
+
+nulls can only be defined in 1 way
+```
+let foo: null = null;
 ```
 
 Functions can be defined in 1 way
 ```
-func main(argc: Int, argv: Arr<Str>): Nul {
-    ret param * 2;
+func main(argc: i32, argv: vec<str>): i32 {
+    ret 0;
 };
 ```
 
 Functions can be called in 2 way
 ```
 foo(10);
-let bar: Int = foo();
+let bar: i32 = foo();
 ```
 
 While loops can be defined in 1 way
@@ -104,12 +106,12 @@ for
 true
 false
 null
-Int
-Str
-Flo
-Boo
-Arr
-Nul
+i32
+str
+f64
+bool
+vec
+null
 ```
 
 Here are all operators:
@@ -155,11 +157,11 @@ Here are all valid punctuation characters:
 
 Here are all available DataTypes:
 ```
-Int: Integer
-Flo: Float
-Boo: Boolean
-Str: String
-Arr: Array // Arrays are generic Arr<T>
-Nul: Null
+i32: integer
+f64: Float
+bool: Boolean
+str: String
+vec: vector // vectors are generic vec<T>
+null: null
 ```
 

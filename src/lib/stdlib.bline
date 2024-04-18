@@ -1,3 +1,19 @@
-func print(params: Arr<Str>): Nul {
+func print(params: vec<str>): null {
+    for mut i: Int = 0; i < getSize(params); i =+ 1; {
+        // log element to output stream
+    };
+    // or
+    mut element: Str;
+    while element != null {
+        // log element to output stream
+    };
+};
 
+func printfln(params: vec<str>): null {
+    // TODO:
+};
+
+func sqrt(x: f64): f64 {
+    ret ;
+    // TODO:
 };
