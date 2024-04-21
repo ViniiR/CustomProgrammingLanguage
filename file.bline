@@ -1,11 +1,6 @@
-//let foo: i32 = foo(
-//    bar(),
-//   20 / 20 - 9,
-//);
-
 // func definition
-func main(): null {
-    let foo: vec<f64> = null;
+func main(): i32 {
+    println("Hello, world!", 10 * 10);
+    ret 0;
 };
 
-// i32 f64 bool str vec null

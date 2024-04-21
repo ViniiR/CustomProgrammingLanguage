@@ -103,7 +103,7 @@ impl fmt::Display for TokenTypes {
                 write!(f, "+=")
             }
             TokenTypes::AssignMinus => {
-                write!(f, "-+")
+                write!(f, "-=")
             }
             TokenTypes::AssignMultiply => {
                 write!(f, "*=")
@@ -193,19 +193,19 @@ impl fmt::Display for TokenTypes {
                 write!(f, ",")
             }
             TokenTypes::Int => {
-                write!(f, "Keyword Int")
+                write!(f, "i32")
             }
             TokenTypes::Flo => {
-                write!(f, "Keyword Flo")
+                write!(f, "f64")
             }
             TokenTypes::Str => {
-                write!(f, "Keyword Str")
+                write!(f, "str")
             }
             TokenTypes::Arr => {
-                write!(f, "Keyword Arr")
+                write!(f, "vec")
             }
             TokenTypes::Boo => {
-                write!(f, "Keyword Boo")
+                write!(f, "bool")
             }
             // TokenTypes::Nul => {
             //     write!(f, "Keyword Nul")
@@ -214,37 +214,37 @@ impl fmt::Display for TokenTypes {
                 write!(f, "Comment")
             }
             TokenTypes::Function => {
-                write!(f, "Keyword func")
+                write!(f, "func")
             }
             TokenTypes::ConstantVariable => {
-                write!(f, "Keyword let")
+                write!(f, "let")
             }
             TokenTypes::MutableVariable => {
-                write!(f, "Keyword mut")
+                write!(f, "mut")
             }
             TokenTypes::If => {
-                write!(f, "Keyword if")
+                write!(f, "if")
             }
             TokenTypes::ElseIf => {
-                write!(f, "Keyword elseif")
+                write!(f, "elseif")
             }
             TokenTypes::Else => {
-                write!(f, "Keyword else")
+                write!(f, "else")
             }
             TokenTypes::While => {
-                write!(f, "Keyword while")
+                write!(f, "while")
             }
             TokenTypes::For => {
-                write!(f, "Keyword for")
+                write!(f, "for")
             }
             TokenTypes::Return => {
-                write!(f, "Keyword ret")
+                write!(f, "ret")
             }
             TokenTypes::Break => {
-                write!(f, "Keyword brk")
+                write!(f, "brk")
             }
             TokenTypes::Continue => {
-                write!(f, "Keyword cnt")
+                write!(f, "cnt")
             }
             TokenTypes::Identifier => {
                 write!(f, "Identifier")
@@ -259,16 +259,16 @@ impl fmt::Display for TokenTypes {
             //     write!(f, "ArrayLiteral")
             // }
             TokenTypes::True => {
-                write!(f, "Keyword true")
+                write!(f, "true")
             }
             TokenTypes::False => {
-                write!(f, "Keyword false")
+                write!(f, "false")
             }
             TokenTypes::Null => {
-                write!(f, "Keyword null")
+                write!(f, "null")
             }
             TokenTypes::UNKNOWN => {
-                write!(f, "Unknown")
+                write!(f, "Unknown Token")
             }
             TokenTypes::EOF => {
                 write!(f, "EndOfFile")
@@ -285,13 +285,13 @@ pub struct Token {
     pub line_number: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VarDeclarationKind {
     Mutable,
     Immutable,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Start {
     pub line: u32,
     pub column: u32,
@@ -316,9 +316,6 @@ pub enum Expression {
     },
     Literal {
         r#type: LiteralTypes,
-        // wrong: this should be expression TODO:
-        // i have no idea what ^ is talking about but i wont remove it
-        // i forgot what ^ and ^^ are talking about so nvm
         value: String,
     },
     ArrayLiteral {
@@ -343,7 +340,7 @@ pub enum ArrayAccess {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LiteralTypes {
     Numeric,
     String,
@@ -352,7 +349,7 @@ pub enum LiteralTypes {
     Null,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum VariableTypes {
     Int,
     Flo,
@@ -368,7 +365,7 @@ pub struct FuncParam {
     pub r#type: VariableTypes,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Program {
         start: Start,

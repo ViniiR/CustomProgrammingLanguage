@@ -469,7 +469,7 @@ impl Parser {
             TokenTypes::BinaryMinus => {
                 self.advance();
                 Expression::Unary {
-                    operator: self.current_type().to_owned(),
+                    operator: TokenTypes::BinaryMinus,
                     operand: Box::new(self.parse_unary_expr()),
                 }
             }

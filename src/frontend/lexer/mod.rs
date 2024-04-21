@@ -251,7 +251,11 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let number_literal: String = number_literal.into_iter().collect();
+        let mut number_literal: String = number_literal.into_iter().collect();
+        if number_literal.chars().nth(0).unwrap() == '.' {
+            number_literal.insert_str(0, "0");
+        }
+
         Token {
             token_value: number_literal,
             token_type: TType::NumberLiteral,

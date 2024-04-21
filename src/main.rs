@@ -1,9 +1,11 @@
 mod backend;
 mod frontend;
 
+use std::fs::File;
 use std::io::Write;
 use std::{env, fs, io::stdout, process::exit};
 
+use crate::backend::transpiler::Transpiler;
 use crate::frontend::lexer::Lexer;
 use crate::frontend::parser::Parser;
 
@@ -26,6 +28,12 @@ pub fn error(line: u32, column: u32, message: String) {
 
 fn report(line: u32, column: u32, message: String) {
     eprintln!("\n| Error at: Ln {}, Col {}, {}", line, column, message);
+}
+
+fn make_c_file(code: String) {
+    let mut file = File::create("prototype01.c").expect("well we fucked up");
+
+    let _ = file.write_all(&code.into_bytes());
 }
 
 fn main() {
@@ -63,9 +71,14 @@ fn main() {
         Ok(result) => {
             let mut lexer_instance = Lexer::new(&result);
             lexer_instance.scan_source_code();
+
             let mut parser_instance = Parser::new(lexer_instance.token_list);
             parser_instance.parse_tokens();
-            dbg!(parser_instance.abstract_syntax_tree);
+
+            let mut transpiler_instance = Transpiler::new(parser_instance.abstract_syntax_tree);
+            transpiler_instance.transpile_abstract_syntax_tree();
+
+            make_c_file(transpiler_instance.c_src_code);
         }
         Err(err) => {
             eprintln!("{err}");
